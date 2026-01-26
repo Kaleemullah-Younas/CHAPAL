@@ -8,6 +8,7 @@ import {
   createTextPart,
   createImagePart,
   ChatMessage,
+  AllKeysExhaustedError,
 } from '@/lib/gemini';
 import { Part } from '@google/generative-ai';
 
@@ -207,6 +208,17 @@ export async function POST(req: NextRequest) {
             );
             lastError =
               error instanceof Error ? error : new Error(String(error));
+
+            // If all API keys are exhausted, don't retry
+            if (error instanceof AllKeysExhaustedError) {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ error: 'All API keys are rate limited. Please try again later.' })}\n\n`,
+                ),
+              );
+              controller.close();
+              return;
+            }
 
             if (attempt === maxRetries) {
               // All retries exhausted
