@@ -22,12 +22,25 @@ export async function uploadToCloudinary(
 ): Promise<UploadResult> {
   const { folder = 'chapal-chat', resourceType = 'auto', filename } = options;
 
+  // For raw files (like PDFs), we need to include the extension in the public_id
+  // since Cloudinary doesn't automatically add it for raw resources
+  let publicId: string | undefined;
+  if (filename) {
+    if (resourceType === 'raw') {
+      // Keep the full filename with extension for raw files
+      publicId = filename;
+    } else {
+      // For images, strip the extension as Cloudinary handles it
+      publicId = filename.split('.')[0];
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder,
         resource_type: resourceType,
-        public_id: filename ? filename.split('.')[0] : undefined,
+        public_id: publicId,
       },
       (error, result) => {
         if (error) {
