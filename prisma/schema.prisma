@@ -78,4 +78,65 @@ model Message {
   chatId      String   @db.ObjectId
   chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
+
+  // Layer 1 - Anomaly detection fields
+  isBlocked   Boolean @default(false)
+  isWarning   Boolean @default(false)
+  safetyScore Int?
+
+  // Layer 2 - Semantic analysis fields
+  isPendingReview  Boolean @default(false) // AI response hidden, sent to admin
+  accuracyScore    Int? // From Groq analysis
+  semanticAnalysis Json? // Full Groq analysis result
+
+  // Admin correction fields
+  isAdminCorrected Boolean   @default(false)
+  originalContent  String? // Original AI response before admin correction
+  correctedBy      String? // Admin user ID who corrected
+  correctedAt      DateTime?
+
+  // User notification
+  hasNotification  Boolean @default(false)
+  notificationRead Boolean @default(false)
+
+  anomalyLog AnomalyLog?
+}
+
+// CHAPAL - Anomaly Log for Admin Review
+model AnomalyLog {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Reference to the flagged message
+  messageId String  @unique @db.ObjectId
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  // User information
+  userId    String
+  userEmail String
+  chatId    String @db.ObjectId
+
+  // Detection details
+  anomalyType      String // Primary anomaly type
+  severity         String // "critical", "high", "medium", "low"
+  layer            String  @default("deterministic") // "deterministic" or "semantic"
+  userQuery        String // The original user message
+  aiResponse       String? // The AI response (may be null if blocked before generation)
+  detectionDetails Json // Full detection result
+  safetyScore      Int
+  accuracyScore    Int? // From Layer 2
+  userEmotion      String
+
+  // Review status
+  status        String    @default("pending") // "pending", "approved", "blocked", "corrected"
+  reviewedBy    String? // Admin user ID who reviewed
+  reviewedAt    DateTime?
+  adminResponse String? // Corrected response from admin (for "corrected" status)
+  reviewNotes   String? // Admin notes about the review
+
+  // Feedback loop
+  feedbackApplied Boolean @default(false)
+  feedbackNotes   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

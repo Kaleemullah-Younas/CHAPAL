@@ -1,27 +1,50 @@
 'use client';
 
+import type { ThinkingStage } from './ThinkingAnimation';
+
 interface AnomalyLog {
   id: string;
   timestamp: string;
   type: string;
   message: string;
   severity: 'low' | 'medium' | 'high';
+  layer?: 'deterministic' | 'semantic';
+}
+
+interface SemanticAnalysis {
+  isHallucination?: boolean;
+  hallucinationConfidence?: number;
+  isMedicalAdvice?: boolean;
+  isPsychological?: boolean;
+  contextType?: string;
+  emotionalConcern?: boolean;
+  riskLevel?: string;
 }
 
 interface TransparencyPanelProps {
   safetyScore: number;
   accuracyScore: number;
   userEmotion: string;
+  emotionIntensity?: 'low' | 'medium' | 'high';
   anomalyLogs: AnomalyLog[];
   isAnalyzing?: boolean;
+  thinkingStage?: ThinkingStage | null;
+  thinkingMessage?: string;
+  semanticAnalysis?: SemanticAnalysis | null;
+  layer?: 'deterministic' | 'semantic';
 }
 
 export function TransparencyPanel({
   safetyScore = 100,
   accuracyScore = 98,
   userEmotion = 'Neutral',
+  emotionIntensity = 'low',
   anomalyLogs = [],
   isAnalyzing = false,
+  thinkingStage = null,
+  thinkingMessage = '',
+  semanticAnalysis = null,
+  layer = 'deterministic',
 }: TransparencyPanelProps) {
   const getSafetyColor = (score: number) => {
     if (score >= 80) return 'text-success';
@@ -66,6 +89,36 @@ export function TransparencyPanel({
     }
   };
 
+  const getEmotionIntensityColor = (intensity: string) => {
+    switch (intensity) {
+      case 'high':
+        return 'text-danger';
+      case 'medium':
+        return 'text-warning';
+      default:
+        return 'text-muted-foreground';
+    }
+  };
+
+  const getThinkingStageIcon = (stage: ThinkingStage | null) => {
+    switch (stage) {
+      case 'analyzing_safety':
+        return '🛡️';
+      case 'checking_injection':
+        return '🔒';
+      case 'detecting_emotion':
+        return '💭';
+      case 'semantic_analysis':
+        return '🧠';
+      case 'generating_response':
+        return '✨';
+      case 'complete':
+        return '✅';
+      default:
+        return '⏳';
+    }
+  };
+
   return (
     <aside className="w-80 h-full bg-white border-l border-border flex flex-col overflow-hidden">
       {/* Header */}
@@ -92,21 +145,62 @@ export function TransparencyPanel({
             <h2 className="font-semibold text-foreground text-sm">
               Live Session Analysis
             </h2>
-            <p className="text-xs text-muted-foreground">
-              Real-time AI monitoring
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground">
+                Real-time AI monitoring
+              </p>
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  layer === 'semantic'
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}
+              >
+                Layer {layer === 'semantic' ? '2' : '1'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Thinking Stage Indicator */}
+      {isAnalyzing && thinkingStage && (
+        <div className="px-4 py-2 bg-primary/5 border-b border-border">
+          <div className="flex items-center gap-2">
+            <span className="text-lg animate-pulse">
+              {getThinkingStageIcon(thinkingStage)}
+            </span>
+            <div className="flex-1">
+              <p className="text-xs font-medium text-primary">
+                {thinkingMessage || 'Processing...'}
+              </p>
+              <div className="flex gap-1 mt-1">
+                {[0, 1, 2].map(i => (
+                  <span
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"
+                    style={{ animationDelay: `${i * 0.15}s` }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
         {/* Safety Score Gauge */}
         <div className="bg-slate-50 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-foreground">
-              Safety Score
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground">
+                Safety Score
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-200 text-slate-600">
+                L1
+              </span>
+            </div>
             <span
               className={`text-2xl font-bold ${getSafetyColor(safetyScore)}`}
             >
@@ -127,23 +221,30 @@ export function TransparencyPanel({
 
         {/* Emotion Detector */}
         <div className="bg-slate-50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-purple-500"
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-purple-500"
+              >
+                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+              </svg>
+              <span className="text-sm font-medium text-foreground">
+                Emotion Detected
+              </span>
+            </div>
+            <span
+              className={`px-2 py-0.5 rounded-full text-xs font-medium ${getEmotionIntensityColor(emotionIntensity)} bg-slate-200`}
             >
-              <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-            </svg>
-            <span className="text-sm font-medium text-foreground">
-              Emotion Detected
+              {emotionIntensity}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -159,33 +260,102 @@ export function TransparencyPanel({
 
         {/* Accuracy Meter */}
         <div className="bg-slate-50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-emerald-500"
-            >
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            <span className="text-sm font-medium text-foreground">
-              Response Accuracy
-            </span>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-emerald-500"
+              >
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              <span className="text-sm font-medium text-foreground">
+                Response Accuracy
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-100 text-indigo-600">
+                L2
+              </span>
+            </div>
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-emerald-600">
+            <span
+              className={`text-2xl font-bold ${accuracyScore >= 70 ? 'text-emerald-600' : 'text-warning'}`}
+            >
               {accuracyScore}%
             </span>
             <span className="text-sm text-muted-foreground">relevance</span>
           </div>
+          {accuracyScore < 70 && (
+            <p className="text-xs text-warning mt-1">
+              ⚠️ Low accuracy detected
+            </p>
+          )}
         </div>
+
+        {/* Semantic Analysis Tags (Layer 2) */}
+        {semanticAnalysis && (
+          <div className="bg-indigo-50 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">🧠</span>
+              <span className="text-sm font-medium text-foreground">
+                Semantic Analysis
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-200 text-indigo-700">
+                L2
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {semanticAnalysis.isHallucination && (
+                <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-700">
+                  ⚠️ Hallucination ({semanticAnalysis.hallucinationConfidence}%)
+                </span>
+              )}
+              {semanticAnalysis.isMedicalAdvice && (
+                <span className="px-2 py-1 rounded-full text-xs bg-amber-100 text-amber-700">
+                  🏥 Medical Content
+                </span>
+              )}
+              {semanticAnalysis.isPsychological && (
+                <span className="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-700">
+                  💭 Psychological
+                </span>
+              )}
+              {semanticAnalysis.emotionalConcern && (
+                <span className="px-2 py-1 rounded-full text-xs bg-pink-100 text-pink-700">
+                  💗 Emotional Concern
+                </span>
+              )}
+              {semanticAnalysis.contextType && (
+                <span className="px-2 py-1 rounded-full text-xs bg-slate-100 text-slate-700">
+                  📋 {semanticAnalysis.contextType}
+                </span>
+              )}
+              {semanticAnalysis.riskLevel && (
+                <span
+                  className={`px-2 py-1 rounded-full text-xs ${
+                    semanticAnalysis.riskLevel === 'critical'
+                      ? 'bg-red-100 text-red-700'
+                      : semanticAnalysis.riskLevel === 'high'
+                        ? 'bg-orange-100 text-orange-700'
+                        : semanticAnalysis.riskLevel === 'medium'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-green-100 text-green-700'
+                  }`}
+                >
+                  Risk: {semanticAnalysis.riskLevel}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Live Flag Log */}
         <div>

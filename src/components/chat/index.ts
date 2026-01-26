@@ -3,3 +3,9 @@ export { ChatMessage } from './ChatMessage';
 export { ChatInput } from './ChatInput';
 export { TransparencyPanel } from './TransparencyPanel';
 export { SimulationToolbar } from './SimulationToolbar';
+export {
+  ThinkingAnimation,
+  ThinkingIndicator,
+  PendingReviewMessage,
+} from './ThinkingAnimation';
+export type { ThinkingStage } from './ThinkingAnimation';

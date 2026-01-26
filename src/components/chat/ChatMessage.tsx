@@ -2,6 +2,7 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { PendingReviewMessage } from './ThinkingAnimation';
 
 interface Attachment {
   type: 'image' | 'document';
@@ -15,6 +16,16 @@ interface Message {
   content: string;
   attachments?: Attachment[] | null;
   createdAt: Date | string;
+  // CHAPAL detection states
+  isBlocked?: boolean;
+  isWarning?: boolean;
+  blockMessage?: string;
+  warningType?: string;
+  // Layer 2 - Human-in-the-loop states
+  isPendingReview?: boolean;
+  pendingMessage?: string;
+  isAdminCorrected?: boolean;
+  correctedAt?: Date | string;
 }
 
 interface ChatMessageProps {
@@ -25,6 +36,141 @@ interface ChatMessageProps {
 export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const attachments = message.attachments as Attachment[] | null;
+
+  // Blocked message (System Block Bubble)
+  if (message.isBlocked && message.role === 'assistant') {
+    return (
+      <div className="flex gap-4 p-4 bg-rose-50 border-l-4 border-rose-500">
+        {/* Stop Icon */}
+        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-rose-500/20 text-rose-600">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+          </svg>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-semibold px-2 py-1 bg-rose-500/20 text-rose-700 rounded-full">
+              🚫 BLOCKED
+            </span>
+          </div>
+          <p className="text-rose-800 font-medium">
+            {message.blockMessage ||
+              'Message Blocked. Security protocols triggered. This incident has been logged for Admin review.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Pending Review message (Layer 2 - Human-in-the-loop)
+  if (message.isPendingReview && message.role === 'assistant') {
+    return (
+      <PendingReviewMessage
+        message={
+          message.pendingMessage ||
+          'Response requires human verification before display.'
+        }
+      />
+    );
+  }
+
+  // Admin Corrected message (Layer 2 - After review)
+  if (message.isAdminCorrected && message.role === 'assistant') {
+    return (
+      <div className="flex gap-4 p-4 bg-blue-50 dark:bg-blue-950/30 border-l-4 border-blue-500">
+        {/* Verified Icon */}
+        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-500/20 text-blue-600">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-semibold px-2 py-1 bg-blue-500/20 text-blue-700 dark:text-blue-300 rounded-full">
+              ✓ Human Verified
+            </span>
+            {message.correctedAt && (
+              <span className="text-xs text-muted-foreground">
+                Reviewed {new Date(message.correctedAt).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-foreground">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Warning message (AI Warning Bubble)
+  if (message.isWarning && message.role === 'assistant') {
+    return (
+      <div className="flex gap-4 p-4 bg-amber-50 border-l-4 border-amber-500">
+        {/* Warning Icon */}
+        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-500/20 text-amber-600">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+            <path d="M12 9v4" />
+            <path d="M12 17h.01" />
+          </svg>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-semibold px-2 py-1 bg-amber-500/20 text-amber-700 rounded-full">
+              ⚠️ Context Warning:{' '}
+              {message.warningType || 'Medical/Psychological Topic'}
+            </span>
+          </div>
+          <div className="prose prose-sm max-w-none text-amber-900">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

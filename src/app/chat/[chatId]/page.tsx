@@ -8,7 +8,10 @@ import {
   ChatInput,
   TransparencyPanel,
   SimulationToolbar,
+  ThinkingAnimation,
+  PendingReviewMessage,
 } from '@/components/chat';
+import type { ThinkingStage } from '@/components/chat';
 import { useState, useRef, useEffect } from 'react';
 
 interface Attachment {
@@ -38,6 +41,13 @@ interface Message {
   content: string;
   attachments?: MessageAttachment[] | null;
   createdAt: Date | string;
+  // CHAPAL detection states
+  isBlocked?: boolean;
+  isWarning?: boolean;
+  isPendingReview?: boolean;
+  blockMessage?: string;
+  warningType?: string;
+  pendingMessage?: string;
 }
 
 interface AnomalyLog {
@@ -46,6 +56,46 @@ interface AnomalyLog {
   type: string;
   message: string;
   severity: 'low' | 'medium' | 'high';
+  layer?: 'deterministic' | 'semantic';
+}
+
+interface DetectionAnomaly {
+  type: string;
+  subType?: string;
+  severity: string;
+  message: string;
+  layer?: string;
+}
+
+interface DetectionResult {
+  layer?: 'deterministic' | 'semantic';
+  isBlocked: boolean;
+  isWarning: boolean;
+  isPendingReview?: boolean;
+  isSafe: boolean;
+  safetyScore: number;
+  accuracyScore?: number;
+  userEmotion: string;
+  emotionIntensity?: 'low' | 'medium' | 'high';
+  anomalies: DetectionAnomaly[];
+  blockMessage?: string;
+  needsLayer2?: boolean;
+  layer2Reasons?: string[];
+}
+
+interface SemanticAnalysis {
+  isHallucination?: boolean;
+  hallucinationConfidence?: number;
+  accuracyScore?: number;
+  isMedicalAdvice?: boolean;
+  isPsychological?: boolean;
+  contextType?: string;
+  userEmotion?: string;
+  emotionIntensity?: 'low' | 'medium' | 'high';
+  emotionalConcern?: boolean;
+  requiresHumanReview?: boolean;
+  reviewReason?: string;
+  riskLevel?: string;
 }
 
 export default function ChatDetailPage() {
@@ -64,12 +114,32 @@ export default function ChatDetailPage() {
   } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Current message detection state
+  const [currentDetection, setCurrentDetection] =
+    useState<DetectionResult | null>(null);
+
+  // Thinking stage state
+  const [thinkingStage, setThinkingStage] = useState<ThinkingStage | null>(
+    null,
+  );
+  const [thinkingMessage, setThinkingMessage] = useState('');
+
+  // Semantic analysis state
+  const [semanticAnalysis, setSemanticAnalysis] =
+    useState<SemanticAnalysis | null>(null);
+
   // Transparency panel state
   const [safetyScore, setSafetyScore] = useState(100);
   const [accuracyScore, setAccuracyScore] = useState(98);
   const [userEmotion, setUserEmotion] = useState('Neutral');
+  const [emotionIntensity, setEmotionIntensity] = useState<
+    'low' | 'medium' | 'high'
+  >('low');
   const [anomalyLogs, setAnomalyLogs] = useState<AnomalyLog[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentLayer, setCurrentLayer] = useState<
+    'deterministic' | 'semantic'
+  >('deterministic');
 
   const utils = trpc.useUtils();
 
@@ -134,6 +204,12 @@ export default function ChatDetailPage() {
 
     try {
       setIsUploading(attachments.length > 0);
+      setIsAnalyzing(true);
+      setCurrentDetection(null);
+      setSemanticAnalysis(null);
+      setThinkingStage(null);
+      setThinkingMessage('');
+      setCurrentLayer('deterministic');
 
       // Upload attachments first
       const uploadedAttachments: UploadedAttachment[] = [];
@@ -172,6 +248,62 @@ export default function ChatDetailPage() {
         }),
       });
 
+      // Check if response is blocked (non-streaming JSON response)
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        const data = await response.json();
+        setIsAnalyzing(false);
+
+        if (data.blocked) {
+          // Handle blocked message
+          const detection = data.detection as DetectionResult;
+          setCurrentDetection(detection);
+
+          // Update transparency panel
+          setSafetyScore(detection.safetyScore);
+          setUserEmotion(detection.userEmotion);
+
+          // Add to anomaly logs
+          if (detection.anomalies.length > 0) {
+            const newLogs = detection.anomalies.map((a, i) => ({
+              id: `${Date.now()}-${i}`,
+              timestamp: new Date().toLocaleTimeString(),
+              type: a.message,
+              message: `${a.type}${a.subType ? ` (${a.subType})` : ''}`,
+              severity: (a.severity === 'critical' ? 'high' : a.severity) as
+                | 'low'
+                | 'medium'
+                | 'high',
+              layer: (detection.layer || 'deterministic') as
+                | 'deterministic'
+                | 'semantic',
+            }));
+            setAnomalyLogs(prev => [...newLogs, ...prev]);
+          }
+
+          // Add blocked response message
+          const blockedMessage: Message = {
+            id: `blocked-${Date.now()}`,
+            role: 'assistant',
+            content: '',
+            attachments: null,
+            createdAt: new Date(),
+            isBlocked: true,
+            blockMessage:
+              detection.blockMessage ||
+              'Message Blocked. Security protocols triggered.',
+          };
+          setMessages(prev => [...prev, blockedMessage]);
+          setIsStreaming(false);
+          setThinkingStage(null);
+
+          // Refresh chat data
+          utils.chat.getChats.invalidate();
+          utils.chat.getChatById.invalidate({ chatId });
+          return;
+        }
+      }
+
       if (!response.ok) {
         throw new Error('Failed to send message');
       }
@@ -179,6 +311,8 @@ export default function ChatDetailPage() {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let fullContent = '';
+      let detectionProcessed = false;
+      let semanticProcessed = false;
 
       if (reader) {
         while (true) {
@@ -192,7 +326,66 @@ export default function ChatDetailPage() {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
-                if (data.retry) {
+
+                // Handle thinking stages
+                if (data.thinking) {
+                  setThinkingStage(data.thinking.stage as ThinkingStage);
+                  setThinkingMessage(data.thinking.message);
+                }
+
+                // Handle detection results (Layer 1)
+                if (data.detection && !detectionProcessed) {
+                  detectionProcessed = true;
+                  const detection = data.detection as DetectionResult;
+                  setCurrentDetection(detection);
+                  setIsAnalyzing(false);
+
+                  // Update transparency panel with real detection data
+                  setSafetyScore(detection.safetyScore);
+                  setUserEmotion(detection.userEmotion);
+                  setEmotionIntensity(detection.emotionIntensity || 'low');
+                  setCurrentLayer(detection.layer || 'deterministic');
+                  if (detection.accuracyScore !== undefined) {
+                    setAccuracyScore(detection.accuracyScore);
+                  }
+
+                  // Add anomalies to log
+                  if (detection.anomalies.length > 0) {
+                    const newLogs = detection.anomalies.map((a, i) => ({
+                      id: `${Date.now()}-${i}`,
+                      timestamp: new Date().toLocaleTimeString(),
+                      type: a.message,
+                      message: `${a.type}${a.subType ? ` (${a.subType})` : ''}`,
+                      severity: (a.severity === 'critical'
+                        ? 'high'
+                        : a.severity) as 'low' | 'medium' | 'high',
+                      layer: (a.layer || 'deterministic') as
+                        | 'deterministic'
+                        | 'semantic',
+                    }));
+                    setAnomalyLogs(prev => [...newLogs, ...prev]);
+                  }
+                }
+                // Handle semantic analysis results (Layer 2)
+                else if (data.semanticAnalysis && !semanticProcessed) {
+                  semanticProcessed = true;
+                  const semantic = data.semanticAnalysis as SemanticAnalysis;
+                  setSemanticAnalysis(semantic);
+                  setCurrentLayer('semantic');
+
+                  // Update accuracy score from Layer 2
+                  if (semantic.accuracyScore !== undefined) {
+                    setAccuracyScore(semantic.accuracyScore);
+                  }
+
+                  // Update emotion from Layer 2 if available
+                  if (semantic.userEmotion) {
+                    setUserEmotion(semantic.userEmotion);
+                  }
+                  if (semantic.emotionIntensity) {
+                    setEmotionIntensity(semantic.emotionIntensity);
+                  }
+                } else if (data.retry) {
                   // Show retry notification
                   setRetryInfo({
                     attempt: data.retry,
@@ -207,22 +400,42 @@ export default function ChatDetailPage() {
                 } else if (data.done) {
                   // Streaming complete
                   setRetryInfo(null);
+                  setThinkingStage(null);
+
+                  // Check if pending review (Layer 2 human-in-the-loop)
+                  const isPendingReview = data.isPendingReview || false;
+                  const pendingMessage = data.pendingMessage || null;
+
+                  // Determine if this is a warning message
+                  const isWarning = currentDetection?.isWarning || false;
+                  const warningType = currentDetection?.anomalies[0]?.message;
+
                   const assistantMessage: Message = {
                     id: `temp-assistant-${Date.now()}`,
                     role: 'assistant',
-                    content: fullContent,
+                    content: isPendingReview ? '' : fullContent,
                     attachments: null,
                     createdAt: new Date(),
+                    isWarning: isWarning,
+                    warningType: warningType,
+                    isPendingReview: isPendingReview,
+                    pendingMessage: pendingMessage,
                   };
                   setMessages(prev => [...prev, assistantMessage]);
                   setStreamingContent('');
                   setIsStreaming(false);
+
+                  // Update accuracy from final response
+                  if (data.accuracyScore !== undefined) {
+                    setAccuracyScore(data.accuracyScore);
+                  }
 
                   // Refresh chat data
                   utils.chat.getChats.invalidate();
                   utils.chat.getChatById.invalidate({ chatId });
                 } else if (data.error) {
                   setRetryInfo(null);
+                  setThinkingStage(null);
                   throw new Error(data.error);
                 }
               } catch {
@@ -238,78 +451,17 @@ export default function ChatDetailPage() {
       setIsUploading(false);
       setStreamingContent('');
       setRetryInfo(null);
+      setIsAnalyzing(false);
+      setThinkingStage(null);
       // Could add error toast here
     }
   };
 
-  // Handle simulation toolbar
+  // Handle simulation toolbar - now uses real anomaly detection
   const handleSimulation = (prompt: string) => {
-    // Start analyzing
-    setIsAnalyzing(true);
-
-    // Simulate the message being sent
+    // The real anomaly detection is now handled by the API
+    // Just send the message normally
     handleSend(prompt, []);
-
-    // Simulate anomaly detection (this would come from the API in real implementation)
-    setTimeout(() => {
-      setIsAnalyzing(false);
-
-      // Detect type of anomaly based on prompt
-      if (prompt.includes('Ignore previous instructions')) {
-        setSafetyScore(15);
-        setUserEmotion('Hostile');
-        setAnomalyLogs(prev => [
-          {
-            id: `${Date.now()}`,
-            timestamp: new Date().toLocaleTimeString(),
-            type: 'Prompt Injection Detected',
-            message: 'Attempted to override system instructions',
-            severity: 'high',
-          },
-          ...prev,
-        ]);
-      } else if (prompt.includes('hopeless') || prompt.includes('end it all')) {
-        setSafetyScore(35);
-        setUserEmotion('Distressed');
-        setAnomalyLogs(prev => [
-          {
-            id: `${Date.now()}`,
-            timestamp: new Date().toLocaleTimeString(),
-            type: 'Self-Harm Risk Detected',
-            message: 'User expressing distress signals',
-            severity: 'high',
-          },
-          ...prev,
-        ]);
-      } else if (prompt.includes('social security')) {
-        setSafetyScore(45);
-        setUserEmotion('Neutral');
-        setAnomalyLogs(prev => [
-          {
-            id: `${Date.now()}`,
-            timestamp: new Date().toLocaleTimeString(),
-            type: 'PII Exposure Detected',
-            message: 'Social Security Number shared',
-            severity: 'high',
-          },
-          ...prev,
-        ]);
-      } else if (prompt.includes('President of Mars')) {
-        setSafetyScore(70);
-        setAccuracyScore(45);
-        setUserEmotion('Curious');
-        setAnomalyLogs(prev => [
-          {
-            id: `${Date.now()}`,
-            timestamp: new Date().toLocaleTimeString(),
-            type: 'Hallucination Risk',
-            message: 'Query may produce factually incorrect response',
-            severity: 'medium',
-          },
-          ...prev,
-        ]);
-      }
-    }, 1500);
   };
 
   if (sessionPending || chatLoading) {
@@ -418,6 +570,14 @@ export default function ChatDetailPage() {
               {messages.map(message => (
                 <ChatMessage key={message.id} message={message} />
               ))}
+              {/* Thinking Animation */}
+              {isStreaming && thinkingStage && !streamingContent && (
+                <ThinkingAnimation
+                  stage={thinkingStage}
+                  message={thinkingMessage}
+                  isVisible={true}
+                />
+              )}
               {isStreaming && streamingContent && (
                 <ChatMessage
                   message={{
@@ -487,8 +647,13 @@ export default function ChatDetailPage() {
         safetyScore={safetyScore}
         accuracyScore={accuracyScore}
         userEmotion={userEmotion}
+        emotionIntensity={emotionIntensity}
         anomalyLogs={anomalyLogs}
         isAnalyzing={isAnalyzing}
+        thinkingStage={thinkingStage}
+        thinkingMessage={thinkingMessage}
+        semanticAnalysis={semanticAnalysis}
+        layer={currentLayer}
       />
     </>
   );
