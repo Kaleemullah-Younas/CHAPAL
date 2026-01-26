@@ -63,7 +63,16 @@ export async function deleteFromCloudinary(
   publicId: string,
   resourceType: 'image' | 'raw' | 'video' = 'image',
 ): Promise<void> {
-  await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+  const result = await cloudinary.uploader.destroy(publicId, {
+    resource_type: resourceType,
+  });
+  console.log(
+    `Cloudinary delete result for ${publicId} (${resourceType}):`,
+    result,
+  );
+  if (result.result !== 'ok' && result.result !== 'not found') {
+    throw new Error(`Failed to delete from Cloudinary: ${result.result}`);
+  }
 }
 
 export { cloudinary };

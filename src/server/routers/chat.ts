@@ -13,15 +13,22 @@ function extractPublicIdFromUrl(
   isRawFile: boolean = false,
 ): string | null {
   try {
+    // Remove any query parameters first
+    const urlWithoutQuery = url.split('?')[0];
+
+    // Decode URL-encoded characters (e.g., %20 -> space)
+    const decodedUrl = decodeURIComponent(urlWithoutQuery);
+
     if (isRawFile) {
       // For raw files, keep the full path including extension
-      const regex = /\/upload\/(?:v\d+\/)?(.+)$/;
-      const match = url.match(regex);
+      // Match /upload/ followed by optional version (v + any alphanumeric), then capture the rest
+      const regex = /\/upload\/(?:v[a-zA-Z0-9]+\/)?(.+)$/;
+      const match = decodedUrl.match(regex);
       return match ? match[1] : null;
     } else {
       // For images, strip the extension
-      const regex = /\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/;
-      const match = url.match(regex);
+      const regex = /\/upload\/(?:v[a-zA-Z0-9]+\/)?(.+?)(?:\.[^./]+)?$/;
+      const match = decodedUrl.match(regex);
       return match ? match[1] : null;
     }
   } catch {
@@ -178,15 +185,22 @@ export const chatRouter = router({
             // Images use 'image', documents (PDFs, etc.) use 'raw'
             const isRawFile = attachment.type !== 'image';
             const publicId = extractPublicIdFromUrl(attachment.url, isRawFile);
+            console.log(
+              `Deleting Cloudinary asset: type=${attachment.type}, isRawFile=${isRawFile}, url=${attachment.url}, publicId=${publicId}`,
+            );
             if (publicId) {
               const resourceType: 'image' | 'raw' = isRawFile ? 'raw' : 'image';
               deletePromises.push(
                 deleteFromCloudinary(publicId, resourceType).catch(err => {
                   console.error(
-                    `Failed to delete Cloudinary asset ${publicId}:`,
+                    `Failed to delete Cloudinary asset ${publicId} (resourceType=${resourceType}):`,
                     err,
                   );
                 }),
+              );
+            } else {
+              console.error(
+                `Failed to extract publicId from URL: ${attachment.url}`,
               );
             }
           }
