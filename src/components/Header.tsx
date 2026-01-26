@@ -1,29 +1,51 @@
 'use client';
 
 import Link from 'next/link';
-import { useSession, signOut } from '@/lib/auth-client';
-import { useState } from 'react';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { useSession } from '@/lib/auth-client';
 import { UserDropdown } from '@/components/UserDropdown';
 
 export function Header() {
   const { data: session, isPending } = useSession();
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-white/80 backdrop-blur-xl">
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-        {/* Logo */}
+        {/* Logo with Shield Icon */}
         <Link
           href="/"
-          className="text-xl font-bold text-foreground hover:text-foreground/80 transition-all duration-300"
+          className="flex items-center gap-2 text-xl font-bold text-foreground hover:text-primary transition-all duration-300"
         >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-primary"
+          >
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
           CHAPAL
         </Link>
 
+        {/* Status Indicator */}
+        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-success/10 border border-success/20">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+          </span>
+          <span className="text-xs font-medium text-success">
+            System Active: Monitoring via AI Guardrails
+          </span>
+        </div>
+
         {/* Auth Actions */}
         <div className="flex items-center gap-2 sm:gap-4">
-          <ThemeToggle />
-
           {isPending ? (
             <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" />
           ) : session ? (
@@ -60,7 +82,7 @@ export function Header() {
               </Link>
               <Link
                 href="/signup"
-                className="flex h-9 items-center justify-center rounded-lg bg-primary px-3 sm:px-5 text-sm font-medium text-primary-foreground transition-all duration-300 hover:opacity-90 shadow-sm cursor-pointer"
+                className="flex h-9 items-center justify-center rounded-lg bg-primary px-3 sm:px-5 text-sm font-medium text-primary-foreground transition-all duration-300 hover:bg-primary/90 shadow-sm cursor-pointer"
               >
                 Sign Up
               </Link>

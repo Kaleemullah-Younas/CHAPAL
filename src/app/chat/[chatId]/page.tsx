@@ -3,7 +3,12 @@
 import { useSession } from '@/lib/auth-client';
 import { useRouter, useParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
-import { ChatMessage, ChatInput } from '@/components/chat';
+import {
+  ChatMessage,
+  ChatInput,
+  TransparencyPanel,
+  SimulationToolbar,
+} from '@/components/chat';
 import { useState, useRef, useEffect } from 'react';
 
 interface Attachment {
@@ -35,6 +40,14 @@ interface Message {
   createdAt: Date | string;
 }
 
+interface AnomalyLog {
+  id: string;
+  timestamp: string;
+  type: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high';
+}
+
 export default function ChatDetailPage() {
   const { data: session, isPending: sessionPending } = useSession();
   const router = useRouter();
@@ -50,6 +63,13 @@ export default function ChatDetailPage() {
     maxRetries: number;
   } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Transparency panel state
+  const [safetyScore, setSafetyScore] = useState(100);
+  const [accuracyScore, setAccuracyScore] = useState(98);
+  const [userEmotion, setUserEmotion] = useState('Neutral');
+  const [anomalyLogs, setAnomalyLogs] = useState<AnomalyLog[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -222,6 +242,76 @@ export default function ChatDetailPage() {
     }
   };
 
+  // Handle simulation toolbar
+  const handleSimulation = (prompt: string) => {
+    // Start analyzing
+    setIsAnalyzing(true);
+
+    // Simulate the message being sent
+    handleSend(prompt, []);
+
+    // Simulate anomaly detection (this would come from the API in real implementation)
+    setTimeout(() => {
+      setIsAnalyzing(false);
+
+      // Detect type of anomaly based on prompt
+      if (prompt.includes('Ignore previous instructions')) {
+        setSafetyScore(15);
+        setUserEmotion('Hostile');
+        setAnomalyLogs(prev => [
+          {
+            id: `${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'Prompt Injection Detected',
+            message: 'Attempted to override system instructions',
+            severity: 'high',
+          },
+          ...prev,
+        ]);
+      } else if (prompt.includes('hopeless') || prompt.includes('end it all')) {
+        setSafetyScore(35);
+        setUserEmotion('Distressed');
+        setAnomalyLogs(prev => [
+          {
+            id: `${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'Self-Harm Risk Detected',
+            message: 'User expressing distress signals',
+            severity: 'high',
+          },
+          ...prev,
+        ]);
+      } else if (prompt.includes('social security')) {
+        setSafetyScore(45);
+        setUserEmotion('Neutral');
+        setAnomalyLogs(prev => [
+          {
+            id: `${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'PII Exposure Detected',
+            message: 'Social Security Number shared',
+            severity: 'high',
+          },
+          ...prev,
+        ]);
+      } else if (prompt.includes('President of Mars')) {
+        setSafetyScore(70);
+        setAccuracyScore(45);
+        setUserEmotion('Curious');
+        setAnomalyLogs(prev => [
+          {
+            id: `${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'Hallucination Risk',
+            message: 'Query may produce factually incorrect response',
+            severity: 'medium',
+          },
+          ...prev,
+        ]);
+      }
+    }, 1500);
+  };
+
   if (sessionPending || chatLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -252,101 +342,154 @@ export default function ChatDetailPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full">
-      {/* Chat Header */}
-      <header className="border-b border-border px-4 py-3 flex items-center justify-between bg-background">
-        <h1 className="font-medium truncate">{chat.title || 'New Chat'}</h1>
-      </header>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto">
-        {messages.length === 0 && !isStreaming ? (
-          <div className="h-full flex items-center justify-center text-muted-foreground">
-            <div className="text-center">
+    <>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col h-full bg-white">
+        {/* Chat Header */}
+        <header className="border-b border-border px-4 py-3 flex items-center justify-between bg-white">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="48"
-                height="48"
+                width="18"
+                height="18"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="1.5"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="mx-auto mb-4 opacity-50"
+                className="text-primary"
               >
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
-              <p>Start the conversation by sending a message</p>
+            </div>
+            <div>
+              <h1 className="font-semibold text-foreground truncate">
+                {chat.title || 'New Chat'}
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                Protected by CHAPAL
+              </p>
             </div>
           </div>
-        ) : (
-          <div>
-            {messages.map(message => (
-              <ChatMessage key={message.id} message={message} />
-            ))}
-            {isStreaming && streamingContent && (
-              <ChatMessage
-                message={{
-                  id: 'streaming',
-                  role: 'assistant',
-                  content: streamingContent,
-                  attachments: null,
-                  createdAt: new Date(),
-                }}
-                isStreaming={true}
-              />
-            )}
-            {isStreaming && retryInfo && (
-              <div className="flex gap-4 p-4 bg-muted/30">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-yellow-500/20 text-yellow-600">
+        </header>
+
+        {/* Simulation Toolbar */}
+        <SimulationToolbar
+          onSimulate={handleSimulation}
+          disabled={isStreaming || isUploading}
+        />
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto">
+          {messages.length === 0 && !isStreaming ? (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              <div className="text-center max-w-md px-4">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
+                    width="32"
+                    height="32"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="2"
+                    strokeWidth="1.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    className="text-primary"
                   >
-                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                    <path d="M3 3v5h5" />
-                    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                    <path d="M16 21h5v-5" />
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+                    <path d="m9 12 2 2 4-4" />
                   </svg>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-500"></div>
-                  <span>
-                    Retrying... Attempt {retryInfo.attempt} of{' '}
-                    {retryInfo.maxRetries}
-                  </span>
-                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  Start a Protected Conversation
+                </h3>
+                <p className="text-sm">
+                  Your messages are monitored by CHAPAL&apos;s AI safety
+                  guardrails. Try the simulation buttons above to see anomaly
+                  detection in action.
+                </p>
               </div>
-            )}
-            <div ref={messagesEndRef} />
+            </div>
+          ) : (
+            <div>
+              {messages.map(message => (
+                <ChatMessage key={message.id} message={message} />
+              ))}
+              {isStreaming && streamingContent && (
+                <ChatMessage
+                  message={{
+                    id: 'streaming',
+                    role: 'assistant',
+                    content: streamingContent,
+                    attachments: null,
+                    createdAt: new Date(),
+                  }}
+                  isStreaming={true}
+                />
+              )}
+              {isStreaming && retryInfo && (
+                <div className="flex gap-4 p-4 bg-muted/30">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-yellow-500/20 text-yellow-600">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                      <path d="M3 3v5h5" />
+                      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                      <path d="M16 21h5v-5" />
+                    </svg>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-500"></div>
+                    <span>
+                      Retrying... Attempt {retryInfo.attempt} of{' '}
+                      {retryInfo.maxRetries}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </div>
+
+        {/* Upload indicator */}
+        {isUploading && (
+          <div className="px-4 py-2 bg-muted/50 border-t border-border">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+              Uploading files...
+            </div>
           </div>
         )}
+
+        {/* Input */}
+        <ChatInput
+          onSend={handleSend}
+          isLoading={isStreaming || isUploading}
+          disabled={isStreaming || isUploading}
+        />
       </div>
 
-      {/* Upload indicator */}
-      {isUploading && (
-        <div className="px-4 py-2 bg-muted/50 border-t border-border">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-            Uploading files...
-          </div>
-        </div>
-      )}
-
-      {/* Input */}
-      <ChatInput
-        onSend={handleSend}
-        isLoading={isStreaming || isUploading}
-        disabled={isStreaming || isUploading}
+      {/* Transparency Panel */}
+      <TransparencyPanel
+        safetyScore={safetyScore}
+        accuracyScore={accuracyScore}
+        userEmotion={userEmotion}
+        anomalyLogs={anomalyLogs}
+        isAnalyzing={isAnalyzing}
       />
-    </div>
+    </>
   );
 }

@@ -14,11 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'CHAPAL',
-  description: 'Your all-in-one evaluation platform',
+  title: 'CHAPAL - Contextual Human-Assisted Protection and Anomaly Learning',
+  description:
+    'AI-powered anomaly detection with human-in-the-loop intervention for safer AI interactions',
 };
 
-import { ThemeProvider } from '@/components/theme-provider';
 import Providers from '@/components/Providers';
 
 export default function RootLayout({
@@ -27,23 +27,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <Providers>
-            <div className="flex min-h-screen flex-col">
-              <Header />
-              <main className="flex-1 pt-16">{children}</main>
-            </div>
-          </Providers>
-        </ThemeProvider>
+        <Providers>
+          <div className="flex min-h-screen flex-col">
+            <Header />
+            <main className="flex-1 pt-16">{children}</main>
+          </div>
+        </Providers>
       </body>
     </html>
   );

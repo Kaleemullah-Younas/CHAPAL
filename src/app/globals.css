@@ -1,35 +1,34 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
-  /* Light Mode */
-  --background: #F4F4F0;
-  --foreground: #000000;
+  /* CHAPAL Professional Light Theme */
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #000000;
+  --card-foreground: #0f172a;
   --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #000000;
+  --popover-foreground: #0f172a;
+  --primary: #3b82f6;
   --primary-foreground: #ffffff;
-  --muted: #e5e5e0;
-  --muted-foreground: #737373;
-  --border: #e5e5e0;
-  --input: #e5e5e0;
-}
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #3b82f6;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
 
-.dark {
-  /* Dark Mode */
-  --background: #000000;
-  --foreground: #F4F4F0;
-  --card: #0a0a0a;
-  --card-foreground: #F4F4F0;
-  --popover: #0a0a0a;
-  --popover-foreground: #F4F4F0;
-  --primary: #ffffff;
-  --primary-foreground: #000000;
-  --muted: #262626;
-  --muted-foreground: #a3a3a3;
-  --border: #262626;
-  --input: #262626;
+  /* Status Colors for CHAPAL */
+  --success: #10b981;
+  --success-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #000000;
+  --danger: #ef4444;
+  --danger-foreground: #ffffff;
 }
 
 @theme inline {
@@ -41,10 +40,23 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -60,20 +72,60 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - Light theme */
 ::-webkit-scrollbar {
   width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: #94a3b8;
+}
+
+/* Status badge styles */
+.badge-safe {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-warning {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-danger {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Message bubble styles */
+.message-user {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.message-ai-safe {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.message-ai-warning {
+  background: rgba(245, 158, 11, 0.05);
+  border: 2px solid #f59e0b;
+}
+
+.message-ai-blocked {
+  background: rgba(239, 68, 68, 0.05);
+  border: 2px solid #ef4444;
 }
