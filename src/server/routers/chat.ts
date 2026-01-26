@@ -293,4 +293,62 @@ export const chatRouter = router({
         orderBy: { createdAt: 'asc' },
       });
     }),
+
+  // Get anomaly logs for a specific chat (for Live Flag Log persistence)
+  getAnomalyLogs: protectedProcedure
+    .input(z.object({ chatId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Verify chat belongs to user
+      const chat = await prisma.chat.findFirst({
+        where: {
+          id: input.chatId,
+          userId: ctx.session.user.id,
+        },
+      });
+
+      if (!chat) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Chat not found',
+        });
+      }
+
+      // Get all anomaly logs for this chat
+      const anomalyLogs = await prisma.anomalyLog.findMany({
+        where: { chatId: input.chatId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          anomalyType: true,
+          severity: true,
+          layer: true,
+          createdAt: true,
+          detectionDetails: true,
+        },
+      });
+
+      // Transform to the format expected by TransparencyPanel
+      return anomalyLogs.map(log => {
+        // Extract the descriptive message from detectionDetails
+        const details = log.detectionDetails as {
+          anomalies?: Array<{ message?: string; type?: string; subType?: string }>;
+        } | null;
+        
+        // Get the first anomaly's message for display
+        const primaryAnomaly = details?.anomalies?.[0];
+        const displayMessage = primaryAnomaly?.message || log.anomalyType;
+
+        return {
+          id: log.id,
+          timestamp: new Date(log.createdAt).toLocaleTimeString(),
+          type: displayMessage,
+          message: `${log.anomalyType}${primaryAnomaly?.subType ? ` (${primaryAnomaly.subType})` : ''}`,
+          severity: (log.severity === 'critical' ? 'high' : log.severity) as
+            | 'low'
+            | 'medium'
+            | 'high',
+          layer: log.layer as 'deterministic' | 'semantic',
+        };
+      });
+    }),
 });

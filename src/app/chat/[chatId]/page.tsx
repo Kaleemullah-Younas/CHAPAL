@@ -151,6 +151,22 @@ export default function ChatDetailPage() {
     },
   );
 
+  // Fetch persisted anomaly logs for this chat
+  const { data: persistedAnomalyLogs } = trpc.chat.getAnomalyLogs.useQuery(
+    { chatId },
+    {
+      enabled: !!chatId && !!session,
+      refetchOnWindowFocus: false,
+    },
+  );
+
+  // Load persisted anomaly logs when data is fetched
+  useEffect(() => {
+    if (persistedAnomalyLogs && persistedAnomalyLogs.length > 0) {
+      setAnomalyLogs(persistedAnomalyLogs);
+    }
+  }, [persistedAnomalyLogs]);
+
   // Update messages when chat data loads
   useEffect(() => {
     if (chat?.messages) {
