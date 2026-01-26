@@ -19,6 +19,7 @@ model User {
 
   sessions Session[]
   accounts Account[]
+  chats    Chat[]
 }
 
 model Session {
@@ -57,4 +58,24 @@ model Verification {
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model Chat {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  title     String?
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Message {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  role        String // "user" | "assistant"
+  content     String
+  attachments Json? // Array of { type: "image" | "document", url: string, name: string }
+  chatId      String   @db.ObjectId
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
 }
