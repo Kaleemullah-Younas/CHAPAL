@@ -1,78 +1,35 @@
 // OCR utilities for extracting text from PDF documents
-// This runs on the server side using pdfjs-dist and tesseract.js
+// This runs on the server side using pdf-parse and tesseract.js
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse = require('pdf-parse');
 import Tesseract from 'tesseract.js';
 
-interface TextItem {
-  str: string;
-}
-
-function hasStr(item: unknown): item is TextItem {
-  return typeof item === 'object' && item !== null && 'str' in item;
-}
-
 /**
- * Extract text from a PDF buffer using OCR
- * Uses pdfjs-dist to render PDF pages to images, then tesseract for OCR
+ * Extract text from a PDF buffer
+ * Uses pdf-parse for text-based PDFs (fast and reliable)
+ * Falls back to OCR only if no text is found
  */
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
-  // Dynamic import to avoid issues with pdfjs-dist in different environments
-  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  try {
+    // First try pdf-parse which handles text-based PDFs well
+    const pdfData = await pdfParse(pdfBuffer);
 
-  // Load the PDF document
-  const loadingTask = pdfjsLib.getDocument({
-    data: new Uint8Array(pdfBuffer),
-    useSystemFonts: true,
-  });
-
-  const pdfDoc = await loadingTask.promise;
-  const numPages = pdfDoc.numPages;
-  const textParts: string[] = [];
-
-  // Process each page
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    const page = await pdfDoc.getPage(pageNum);
-
-    // First try to extract text directly (for text-based PDFs)
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map(item => (hasStr(item) ? item.str : ''))
-      .join(' ')
-      .trim();
-
-    if (pageText.length > 50) {
-      // If we got substantial text, use it directly
-      textParts.push(`--- Page ${pageNum} ---\n${pageText}`);
-    } else {
-      // Otherwise, render to image and use OCR
-      const viewport = page.getViewport({ scale: 2.0 }); // Higher scale for better OCR
-
-      // Create a canvas-like structure for node
-      const { createCanvas } = await import('canvas');
-      const canvas = createCanvas(viewport.width, viewport.height);
-      const context = canvas.getContext('2d');
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await page.render({
-        canvasContext: context as any,
-        viewport,
-      } as any).promise;
-
-      // Convert canvas to buffer
-      const imageBuffer = canvas.toBuffer('image/png');
-
-      // Run OCR on the image
-      const {
-        data: { text },
-      } = await Tesseract.recognize(imageBuffer, 'eng', {
-        logger: () => {}, // Suppress logs
-      });
-
-      textParts.push(`--- Page ${pageNum} ---\n${text.trim()}`);
+    // If we got substantial text, return it
+    if (pdfData.text && pdfData.text.trim().length > 50) {
+      return pdfData.text.trim();
     }
-  }
 
-  return textParts.join('\n\n');
+    // If PDF has very little or no text, it might be a scanned document
+    if (pdfData.text && pdfData.text.trim().length > 0) {
+      return pdfData.text.trim();
+    }
+
+    return '[This PDF appears to be scanned/image-based. Text extraction limited.]';
+  } catch (error) {
+    console.error('PDF parse error:', error);
+    throw new Error('Failed to extract text from PDF');
+  }
 }
 
 /**
