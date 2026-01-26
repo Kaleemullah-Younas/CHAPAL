@@ -1,13 +1,13 @@
-import nodemailer from "nodemailer";
+import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
-    host: "smtp-relay.brevo.com",
-    port: 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-        user: process.env.BREVO_USER,
-        pass: process.env.BREVO_PASS,
-    },
+  host: 'smtp-relay.brevo.com',
+  port: 587,
+  secure: false, // true for 465, false for other ports
+  auth: {
+    user: process.env.BREVO_USER,
+    pass: process.env.BREVO_PASS,
+  },
 });
 
 const getBaseHtml = (content: string) => `
@@ -34,13 +34,13 @@ const getBaseHtml = (content: string) => `
 <body>
     <div class="container">
         <div class="header">
-            <a href="${process.env.NEXT_PUBLIC_APP_URL}" class="logo">Greenly</a>
+            <a href="${process.env.NEXT_PUBLIC_APP_URL}" class="logo">CHAPAL</a>
         </div>
         <div class="content">
             ${content}
         </div>
         <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Greenly. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} CHAPAL. All rights reserved.</p>
             <p>If you have any questions, reply to this email.</p>
         </div>
     </div>
@@ -49,9 +49,9 @@ const getBaseHtml = (content: string) => `
 `;
 
 export const sendVerificationEmail = async (email: string, url: string) => {
-    const html = getBaseHtml(`
+  const html = getBaseHtml(`
         <h2 style="margin-top: 0;">Verify your email</h2>
-        <p>Thanks for signing up for Greenly! Please click the button below to verify your email address.</p>
+        <p>Thanks for signing up for CHAPAL! Please click the button below to verify your email address.</p>
         <div style="text-align: center;">
             <a href="${url}" class="button">Verify Email</a>
         </div>
@@ -60,23 +60,27 @@ export const sendVerificationEmail = async (email: string, url: string) => {
         </p>
     `);
 
-    try {
-        console.log(`[Email Service] Attempting to send verification email to ${email}`);
-        await transporter.sendMail({
-            from: `"Greenly" <${process.env.BREVO_USER}>`,
-            to: email,
-            subject: "Verify your email address",
-            html,
-        });
-        console.log(`[Email Service] Verification email sent successfully to ${email}`);
-    } catch (error) {
-        console.error("[Email Service] FAILED to send verification email:", error);
-        throw error;
-    }
+  try {
+    console.log(
+      `[Email Service] Attempting to send verification email to ${email}`,
+    );
+    await transporter.sendMail({
+      from: `"CHAPAL" <${process.env.BREVO_USER}>`,
+      to: email,
+      subject: 'Verify your email address',
+      html,
+    });
+    console.log(
+      `[Email Service] Verification email sent successfully to ${email}`,
+    );
+  } catch (error) {
+    console.error('[Email Service] FAILED to send verification email:', error);
+    throw error;
+  }
 };
 
 export const sendPasswordResetEmail = async (email: string, url: string) => {
-    const html = getBaseHtml(`
+  const html = getBaseHtml(`
         <h2 style="margin-top: 0;">Reset your password</h2>
         <p>We received a request to reset your password. Click the button below to create a new one.</p>
         <div style="text-align: center;">
@@ -87,17 +91,24 @@ export const sendPasswordResetEmail = async (email: string, url: string) => {
         </p>
     `);
 
-    try {
-        console.log(`[Email Service] Attempting to send password reset email to ${email}`);
-        await transporter.sendMail({
-            from: `"Greenly" <${process.env.BREVO_USER}>`,
-            to: email,
-            subject: "Reset your password",
-            html,
-        });
-        console.log(`[Email Service] Password reset email sent successfully to ${email}`);
-    } catch (error) {
-        console.error("[Email Service] FAILED to send password reset email:", error);
-        throw error;
-    }
+  try {
+    console.log(
+      `[Email Service] Attempting to send password reset email to ${email}`,
+    );
+    await transporter.sendMail({
+      from: `"CHAPAL" <${process.env.BREVO_USER}>`,
+      to: email,
+      subject: 'Reset your password',
+      html,
+    });
+    console.log(
+      `[Email Service] Password reset email sent successfully to ${email}`,
+    );
+  } catch (error) {
+    console.error(
+      '[Email Service] FAILED to send password reset email:',
+      error,
+    );
+    throw error;
+  }
 };
