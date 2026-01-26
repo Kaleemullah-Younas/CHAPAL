@@ -45,7 +45,10 @@ export default function ChatDetailPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [retryInfo, setRetryInfo] = useState<{ attempt: number; maxRetries: number } | null>(null);
+  const [retryInfo, setRetryInfo] = useState<{
+    attempt: number;
+    maxRetries: number;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const utils = trpc.useUtils();
@@ -171,7 +174,10 @@ export default function ChatDetailPage() {
                 const data = JSON.parse(line.slice(6));
                 if (data.retry) {
                   // Show retry notification
-                  setRetryInfo({ attempt: data.retry, maxRetries: data.maxRetries });
+                  setRetryInfo({
+                    attempt: data.retry,
+                    maxRetries: data.maxRetries,
+                  });
                   setStreamingContent('');
                   fullContent = '';
                 } else if (data.text) {
@@ -314,7 +320,8 @@ export default function ChatDetailPage() {
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-500"></div>
                   <span>
-                    Retrying... Attempt {retryInfo.attempt} of {retryInfo.maxRetries}
+                    Retrying... Attempt {retryInfo.attempt} of{' '}
+                    {retryInfo.maxRetries}
                   </span>
                 </div>
               </div>

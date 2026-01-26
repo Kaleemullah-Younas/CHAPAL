@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         const systemPrompt = `You are a helpful AI assistant. Be concise but thorough in your responses. If the user shares images or documents, analyze them carefully and provide relevant insights.`;
-        
+
         const maxRetries = 3;
         let lastError: Error | null = null;
 
@@ -201,9 +201,13 @@ export async function POST(req: NextRequest) {
             controller.close();
             return; // Success, exit the retry loop
           } catch (error) {
-            console.error(`Streaming error (attempt ${attempt}/${maxRetries}):`, error);
-            lastError = error instanceof Error ? error : new Error(String(error));
-            
+            console.error(
+              `Streaming error (attempt ${attempt}/${maxRetries}):`,
+              error,
+            );
+            lastError =
+              error instanceof Error ? error : new Error(String(error));
+
             if (attempt === maxRetries) {
               // All retries exhausted
               controller.enqueue(
