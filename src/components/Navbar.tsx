@@ -19,14 +19,35 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Animate navbar width and position based on scroll
-  const navWidth = useTransform(scrollY, [0, 100], ['100%', '90%']);
+  // Animate navbar - full width at top, shrinks to rounded rectangle on scroll
+  const navWidth = useTransform(
+    scrollY,
+    [0, 100],
+    ['100%', 'min(800px, 90vw)'],
+  );
   const navY = useTransform(scrollY, [0, 100], [0, 8]);
-  const navBorderRadius = useTransform(scrollY, [0, 100], [0, 24]);
+  const navPadding = useTransform(scrollY, [0, 100], ['8px 24px', '6px 16px']);
+  const navBorderRadius = useTransform(scrollY, [0, 100], [0, 20]);
   const navBackground = useTransform(
     scrollY,
     [0, 100],
-    ['rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.95)'],
+    ['rgba(255, 255, 255, 0.85)', 'rgba(255, 255, 255, 0.95)'],
+  );
+  const navShadow = useTransform(
+    scrollY,
+    [0, 100],
+    [
+      '0 1px 3px rgba(76, 118, 156, 0.05)',
+      '0 8px 32px rgba(76, 118, 156, 0.12)',
+    ],
+  );
+  const navBorder = useTransform(
+    scrollY,
+    [0, 100],
+    [
+      '1px solid rgba(137, 201, 250, 0.1)',
+      '1px solid rgba(137, 201, 250, 0.3)',
+    ],
   );
 
   return (
@@ -34,26 +55,29 @@ export function Navbar() {
       className="fixed top-0 left-0 right-0 z-50 flex justify-center"
       style={{
         paddingTop: navY,
-        paddingLeft: isScrolled ? '5%' : '0',
-        paddingRight: isScrolled ? '5%' : '0',
+        paddingLeft: isScrolled ? 16 : 0,
+        paddingRight: isScrolled ? 16 : 0,
       }}
     >
       <motion.nav
-        className="backdrop-blur-xl border border-border/50 shadow-lg shadow-primary/5"
+        className="backdrop-blur-xl"
         style={{
           width: navWidth,
-          borderRadius: navBorderRadius,
           backgroundColor: navBackground,
+          boxShadow: navShadow,
+          padding: navPadding,
+          borderRadius: navBorderRadius,
+          border: navBorder,
         }}
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
       >
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+        <div className="flex items-center justify-between max-w-7xl mx-auto w-full">
           {/* Logo */}
           <Link
             href="/"
-            className="flex items-center gap-2 text-xl font-bold text-foreground hover:text-primary transition-all duration-300"
+            className="flex items-center gap-2 text-lg font-bold text-foreground hover:text-primary transition-all duration-300"
           >
             <motion.div
               whileHover={{ scale: 1.05, rotate: 5 }}
@@ -62,23 +86,21 @@ export function Navbar() {
               <img
                 src="/logo.svg"
                 alt="CHAPAL Logo"
-                width={36}
-                height={36}
+                width={28}
+                height={28}
                 className="drop-shadow-sm"
               />
             </motion.div>
-            <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              CHAPAL
-            </span>
+            <span className="text-primary font-bold font-heading">CHAPAL</span>
           </Link>
 
           {/* Navigation Links - Centered */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-0.5">
             {['Features', 'How it Works', 'Detection'].map(item => (
               <motion.a
                 key={item}
                 href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
-                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary rounded-xl transition-all duration-300 hover:bg-primary/5"
+                className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-primary rounded-lg transition-all duration-300 hover:bg-primary/5"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
@@ -88,9 +110,9 @@ export function Navbar() {
           </div>
 
           {/* Auth Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2">
             {isPending ? (
-              <div className="h-9 w-24 animate-pulse rounded-xl bg-muted" />
+              <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" />
             ) : session ? (
               <>
                 <motion.div
@@ -99,19 +121,19 @@ export function Navbar() {
                 >
                   <Link
                     href="/chat"
-                    className="flex h-10 items-center justify-center rounded-xl px-4 text-sm font-medium text-muted-foreground transition-all duration-300 hover:text-primary hover:bg-primary/5"
+                    className="flex h-8 items-center justify-center rounded-lg px-3 text-sm font-medium text-muted-foreground transition-all duration-300 hover:text-primary hover:bg-primary/5"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
-                      width="18"
-                      height="18"
+                      width="16"
+                      height="16"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      className="mr-2"
+                      className="mr-1.5"
                     >
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                     </svg>
@@ -128,7 +150,7 @@ export function Navbar() {
                 >
                   <Link
                     href="/signin"
-                    className="flex h-10 items-center justify-center rounded-xl px-4 text-sm font-medium text-muted-foreground transition-all duration-300 hover:text-primary"
+                    className="flex h-8 items-center justify-center rounded-lg px-3 text-sm font-medium text-muted-foreground transition-all duration-300 hover:text-primary"
                   >
                     Sign In
                   </Link>
@@ -139,7 +161,7 @@ export function Navbar() {
                 >
                   <Link
                     href="/signup"
-                    className="flex h-10 items-center justify-center rounded-xl bg-gradient-to-r from-primary to-accent px-5 text-sm font-medium text-white transition-all duration-300 hover:shadow-lg hover:shadow-primary/25"
+                    className="flex h-8 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-white transition-all duration-300 hover:bg-primary/90 hover:shadow-md"
                   >
                     Get Started
                   </Link>
