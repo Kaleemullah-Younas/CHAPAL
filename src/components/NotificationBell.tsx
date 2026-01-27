@@ -35,10 +35,13 @@ export function NotificationBell() {
       refetchInterval: 30000, // Refetch every 30 seconds as fallback
     });
 
-  const { data: notificationsData, refetch: refetchNotifications } =
-    trpc.chat.getNotifications.useQuery(undefined, {
-      enabled: !!session && isOpen,
-    });
+  const {
+    data: notificationsData,
+    refetch: refetchNotifications,
+    isLoading: isLoadingNotifications,
+  } = trpc.chat.getNotifications.useQuery(undefined, {
+    enabled: !!session && isOpen,
+  });
 
   const markNotificationRead = trpc.chat.markNotificationRead.useMutation({
     onSuccess: () => {
@@ -106,7 +109,7 @@ export function NotificationBell() {
       setIsOpen(false);
       return;
     }
-    
+
     // Mark as read (only for message-based notifications)
     if (!notification.id.startsWith('warning-')) {
       await markNotificationRead.mutateAsync({ messageId: notification.id });
@@ -114,7 +117,7 @@ export function NotificationBell() {
       // For warnings, just remove from local state
       setNotifications(prev => prev.filter(n => n.id !== notification.id));
     }
-    
+
     // Navigate to chat if there's a chatId
     if (notification.chatId) {
       router.push(`/chat/${notification.chatId}`);
@@ -268,7 +271,25 @@ export function NotificationBell() {
           </div>
 
           <div className="max-h-100 overflow-y-auto">
-            {displayNotifications.length === 0 ? (
+            {isLoadingNotifications ? (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mb-2 opacity-50 animate-spin"
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+                <p className="text-sm">Loading notifications...</p>
+              </div>
+            ) : displayNotifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"

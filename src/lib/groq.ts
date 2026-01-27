@@ -10,10 +10,83 @@
 
 import Groq from 'groq-sdk';
 
-// Initialize Groq client
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+// Parse comma-separated API keys from environment variable
+const API_KEYS = (process.env.GROQ_API_KEY || '')
+  .split(',')
+  .map(key => key.trim())
+  .filter(key => key.length > 0);
+
+if (API_KEYS.length === 0) {
+  console.warn('No Groq API keys found in GROQ_API_KEY environment variable');
+}
+
+// Key rotation manager for Groq
+class GroqKeyManager {
+  private currentKeyIndex = 0;
+  private clients: Map<string, Groq> = new Map();
+
+  getCurrentKey(): string {
+    return API_KEYS[this.currentKeyIndex] || '';
+  }
+
+  getClient(): Groq {
+    const key = this.getCurrentKey();
+    if (!this.clients.has(key)) {
+      this.clients.set(key, new Groq({ apiKey: key }));
+    }
+    return this.clients.get(key)!;
+  }
+
+  rotateToNextKey(): boolean {
+    if (this.currentKeyIndex < API_KEYS.length - 1) {
+      this.currentKeyIndex++;
+      console.log(
+        `Groq: Rotating to API key ${this.currentKeyIndex + 1}/${API_KEYS.length}`,
+      );
+      return true;
+    }
+    return false; // No more keys available
+  }
+
+  resetKeyIndex(): void {
+    this.currentKeyIndex = 0;
+  }
+
+  getTotalKeys(): number {
+    return API_KEYS.length;
+  }
+
+  getCurrentKeyNumber(): number {
+    return this.currentKeyIndex + 1;
+  }
+}
+
+const keyManager = new GroqKeyManager();
+
+// Custom error for when all keys are exhausted
+export class AllGroqKeysExhaustedError extends Error {
+  constructor() {
+    super('All Groq API keys have been rate limited. Please try again later.');
+    this.name = 'AllGroqKeysExhaustedError';
+  }
+}
+
+// Helper to check if error is a 429 rate limit error
+function isRateLimitError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('429') ||
+      message.includes('rate limit') ||
+      message.includes('quota exceeded') ||
+      message.includes('resource exhausted')
+    );
+  }
+  return false;
+}
+
+// For backwards compatibility
+const groq = keyManager.getClient();
 
 export interface SemanticAnalysisResult {
   // Hallucination detection
@@ -123,55 +196,77 @@ export async function analyzeWithGroq(
   userQuery: string,
   aiResponse: string,
 ): Promise<SemanticAnalysisResult> {
-  try {
-    const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-70b-versatile',
-      messages: [
-        {
-          role: 'system',
-          content: SEMANTIC_ANALYSIS_PROMPT,
-        },
-        {
-          role: 'user',
-          content: `USER QUERY:\n${userQuery}\n\nAI RESPONSE:\n${aiResponse}`,
-        },
-      ],
-      temperature: 0.1, // Low temperature for consistent analysis
-      max_tokens: 1000,
-      response_format: { type: 'json_object' },
-    });
+  // Reset to first key at the start of a new request
+  keyManager.resetKeyIndex();
 
-    const responseText = completion.choices[0]?.message?.content || '{}';
-    const analysis = JSON.parse(responseText) as SemanticAnalysisResult;
+  while (true) {
+    try {
+      const client = keyManager.getClient();
+      const completion = await client.chat.completions.create({
+        model: 'llama-3.1-70b-versatile',
+        messages: [
+          {
+            role: 'system',
+            content: SEMANTIC_ANALYSIS_PROMPT,
+          },
+          {
+            role: 'user',
+            content: `USER QUERY:\n${userQuery}\n\nAI RESPONSE:\n${aiResponse}`,
+          },
+        ],
+        temperature: 0.1, // Low temperature for consistent analysis
+        max_tokens: 1000,
+        response_format: { type: 'json_object' },
+      });
 
-    return analysis;
-  } catch (error) {
-    console.error('Groq analysis error:', error);
+      const responseText = completion.choices[0]?.message?.content || '{}';
+      const analysis = JSON.parse(responseText) as SemanticAnalysisResult;
 
-    // Return a safe default if Groq fails
-    return {
-      isHallucination: false,
-      hallucinationConfidence: 0,
-      hallucinationReason: null,
-      accuracyScore: 85,
-      accuracyNotes: 'Unable to analyze - Groq API error',
-      isPII: false,
-      piiConfidence: 0,
-      piiType: null,
-      isMedicalAdvice: false,
-      medicalAdviceSeverity: 'none',
-      medicalAdviceReason: null,
-      isPsychological: false,
-      contextType: null,
-      contextConfidence: 0,
-      userEmotion: 'Neutral',
-      emotionIntensity: 'low',
-      emotionalConcern: false,
-      requiresHumanReview: false,
-      reviewReason: null,
-      riskLevel: 'low',
-    };
+      return analysis;
+    } catch (error) {
+      if (isRateLimitError(error)) {
+        console.warn(
+          `Groq: Rate limit hit on API key ${keyManager.getCurrentKeyNumber()}/${keyManager.getTotalKeys()}`,
+        );
+        if (!keyManager.rotateToNextKey()) {
+          console.error('Groq: All API keys exhausted');
+          // Return a safe default if all keys are exhausted
+          return getDefaultAnalysisResult('All Groq API keys rate limited');
+        }
+        // Continue to retry with next key
+      } else {
+        console.error('Groq analysis error:', error);
+        // Return a safe default if Groq fails
+        return getDefaultAnalysisResult('Groq API error');
+      }
+    }
   }
+}
+
+// Helper function to return default analysis result
+function getDefaultAnalysisResult(reason: string): SemanticAnalysisResult {
+  return {
+    isHallucination: false,
+    hallucinationConfidence: 0,
+    hallucinationReason: null,
+    accuracyScore: 85,
+    accuracyNotes: `Unable to analyze - ${reason}`,
+    isPII: false,
+    piiConfidence: 0,
+    piiType: null,
+    isMedicalAdvice: false,
+    medicalAdviceSeverity: 'none',
+    medicalAdviceReason: null,
+    isPsychological: false,
+    contextType: null,
+    contextConfidence: 0,
+    userEmotion: 'Neutral',
+    emotionIntensity: 'low',
+    emotionalConcern: false,
+    requiresHumanReview: false,
+    reviewReason: null,
+    riskLevel: 'low',
+  };
 }
 
 // Quick check for obvious hallucination triggers (used before full Groq analysis)
