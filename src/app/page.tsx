@@ -54,13 +54,13 @@ function SectionHeader({
       )}
       <motion.h2
         variants={fadeInUp}
-        className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4 font-heading"
+        className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4 font-heading tracking-tight"
       >
         {title}
       </motion.h2>
       <motion.p
         variants={fadeInUp}
-        className="text-lg text-muted-foreground max-w-2xl mx-auto"
+        className="text-lg text-muted-foreground max-w-2xl mx-auto font-sans"
       >
         {description}
       </motion.p>
@@ -71,9 +71,9 @@ function SectionHeader({
 // Hero Section
 function HeroSection() {
   return (
-    <section className="relative overflow-hidden hero-texture min-h-screen flex items-center">
+    <section className="relative overflow-hidden hero-texture min-h-screen flex items-center pt-20">
       {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden -z-10">
         <motion.div
           className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-accent/30 to-primary/20 rounded-full blur-3xl"
           animate={{
@@ -110,7 +110,7 @@ function HeroSection() {
           {/* Subtitle */}
           <motion.p
             variants={fadeInUp}
-            className="text-sm font-semibold tracking-widest uppercase text-primary/80 mb-6"
+            className="text-sm font-semibold tracking-widest uppercase text-primary/80 mb-6 font-heading"
           >
             AI Safety & Anomaly Detection Platform
           </motion.p>
@@ -129,7 +129,7 @@ function HeroSection() {
 
           <motion.p
             variants={fadeInUp}
-            className="mx-auto max-w-2xl text-lg sm:text-xl text-muted-foreground mb-10"
+            className="mx-auto max-w-2xl text-lg sm:text-xl text-muted-foreground mb-10 font-sans"
           >
             CHAPAL provides real-time AI response monitoring with automated
             anomaly detection and human-in-the-loop intervention. Ensure safe,
@@ -144,7 +144,7 @@ function HeroSection() {
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
               <Link
                 href="/signup"
-                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white bg-primary rounded-2xl hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/20 transition-all duration-300"
+                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white bg-primary rounded-2xl hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/20 transition-all duration-300 font-heading"
               >
                 Get Started Free
                 <svg
@@ -166,7 +166,7 @@ function HeroSection() {
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
               <Link
                 href="/chat"
-                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-primary bg-white rounded-2xl border border-accent/30 hover:bg-accent/10 transition-all duration-300 shadow-lg shadow-accent/10"
+                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-primary bg-white rounded-2xl border border-accent/30 hover:bg-accent/10 transition-all duration-300 shadow-lg shadow-accent/10 font-heading"
               >
                 Try Demo
               </Link>
@@ -189,10 +189,10 @@ function HeroSection() {
                 className="text-center"
                 whileHover={{ scale: 1.05 }}
               >
-                <div className="text-2xl sm:text-3xl font-bold text-primary">
+                <div className="text-2xl sm:text-3xl font-bold text-primary font-heading">
                   {stat.value}
                 </div>
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm text-muted-foreground font-sans">
                   {stat.label}
                 </div>
               </motion.div>
@@ -366,10 +366,10 @@ function BentoGridSection() {
                   {feature.icon}
                 </div>
               </motion.div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
+              <h3 className="text-xl font-semibold text-foreground mb-3 font-heading">
                 {feature.title}
               </h3>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-muted-foreground leading-relaxed font-sans">
                 {feature.description}
               </p>
             </motion.div>
@@ -451,16 +451,16 @@ function HowItWorksSection() {
                     className={`absolute -top-6 left-8 w-12 h-12 bg-gradient-to-br ${step.color} rounded-2xl flex items-center justify-center shadow-lg`}
                     whileHover={{ scale: 1.1, rotate: 10 }}
                   >
-                    <span className="text-xl font-bold text-white">
+                    <span className="text-xl font-bold text-white font-heading">
                       {step.phase}
                     </span>
                   </motion.div>
 
                   <div className="pt-4">
-                    <h3 className="text-xl font-semibold text-foreground mb-3">
+                    <h3 className="text-xl font-semibold text-foreground mb-3 font-heading">
                       {step.title}
                     </h3>
-                    <p className="text-muted-foreground leading-relaxed">
+                    <p className="text-muted-foreground leading-relaxed font-sans">
                       {step.description}
                     </p>
                   </div>
@@ -637,10 +637,10 @@ function DetectionSection() {
                 {detection.icon}
               </motion.div>
               <div>
-                <h3 className="text-lg font-semibold text-foreground mb-1">
+                <h3 className="text-lg font-semibold text-foreground mb-1 font-heading">
                   {detection.title}
                 </h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground font-sans">
                   {detection.description}
                 </p>
               </div>
@@ -696,13 +696,13 @@ function CTASection() {
       >
         <motion.h2
           variants={fadeInUp}
-          className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-6"
+          className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-6 font-heading tracking-tight"
         >
           Start Protecting Your AI Interactions Today
         </motion.h2>
         <motion.p
           variants={fadeInUp}
-          className="text-lg text-white/80 mb-10 max-w-2xl mx-auto"
+          className="text-lg text-white/80 mb-10 max-w-2xl mx-auto font-sans"
         >
           Join CHAPAL and experience the power of human-in-the-loop AI safety
           monitoring with real-time anomaly detection.
@@ -714,7 +714,7 @@ function CTASection() {
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Link
               href="/signup"
-              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-primary bg-white rounded-2xl hover:bg-white/90 transition-all duration-300 shadow-lg shadow-black/10"
+              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-primary bg-white rounded-2xl hover:bg-white/90 transition-all duration-300 shadow-lg shadow-black/10 font-heading"
             >
               Get Started Free
             </Link>
@@ -722,7 +722,7 @@ function CTASection() {
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Link
               href="/chat"
-              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white bg-white/10 rounded-2xl border border-white/30 hover:bg-white/20 transition-all duration-300"
+              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white bg-white/10 rounded-2xl border border-white/30 hover:bg-white/20 transition-all duration-300 font-heading"
             >
               Try Demo
             </Link>
@@ -762,11 +762,11 @@ function FooterSection() {
                 height={32}
                 className="drop-shadow-sm"
               />
-              <span className="text-xl font-bold text-white font-heading">
+              <span className="text-xl font-bold text-white font-heading tracking-wide">
                 CHAPAL
               </span>
             </Link>
-            <p className="text-white/60 max-w-sm leading-relaxed">
+            <p className="text-white/60 max-w-sm leading-relaxed font-sans">
               Contextual Human-Assisted Protection and Anomaly Learning.
               Ensuring safe, accurate, and compliant AI interactions.
             </p>
@@ -774,13 +774,15 @@ function FooterSection() {
 
           {/* Product links */}
           <div>
-            <h4 className="text-white font-semibold mb-4">Product</h4>
+            <h4 className="text-white font-semibold mb-4 font-heading">
+              Product
+            </h4>
             <ul className="space-y-3">
               {footerLinks.product.map(link => (
                 <li key={link.name}>
                   <a
                     href={link.href}
-                    className="text-white/60 hover:text-accent transition-colors duration-300"
+                    className="text-white/60 hover:text-accent transition-colors duration-300 font-sans"
                   >
                     {link.name}
                   </a>
@@ -791,13 +793,15 @@ function FooterSection() {
 
           {/* Account links */}
           <div>
-            <h4 className="text-white font-semibold mb-4">Account</h4>
+            <h4 className="text-white font-semibold mb-4 font-heading">
+              Account
+            </h4>
             <ul className="space-y-3">
               {footerLinks.account.map(link => (
                 <li key={link.name}>
                   <Link
                     href={link.href}
-                    className="text-white/60 hover:text-accent transition-colors duration-300"
+                    className="text-white/60 hover:text-accent transition-colors duration-300 font-sans"
                   >
                     {link.name}
                   </Link>
@@ -809,7 +813,7 @@ function FooterSection() {
 
         {/* Bottom bar */}
         <div className="pt-8 border-t border-white/10 flex items-center justify-center">
-          <p className="text-sm text-white/50">
+          <p className="text-sm text-white/50 font-sans">
             © 2026 CHAPAL. All rights reserved.
           </p>
         </div>

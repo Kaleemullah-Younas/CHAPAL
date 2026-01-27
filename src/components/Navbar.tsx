@@ -1,79 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSession } from '@/lib/auth-client';
 import { UserDropdown } from '@/components/UserDropdown';
-import { motion, useScroll, useTransform } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 
 export function Navbar() {
   const { data: session, isPending } = useSession();
-  const { scrollY } = useScroll();
-  const [isScrolled, setIsScrolled] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Animate navbar - full width at top, shrinks to rounded rectangle on scroll
-  const navWidth = useTransform(
-    scrollY,
-    [0, 100],
-    ['100%', 'min(800px, 90vw)'],
-  );
-  const navY = useTransform(scrollY, [0, 100], [0, 8]);
-  const navPadding = useTransform(scrollY, [0, 100], ['8px 24px', '6px 16px']);
-  const navBorderRadius = useTransform(scrollY, [0, 100], [0, 20]);
-  const navBackground = useTransform(
-    scrollY,
-    [0, 100],
-    ['rgba(255, 255, 255, 0.85)', 'rgba(255, 255, 255, 0.95)'],
-  );
-  const navShadow = useTransform(
-    scrollY,
-    [0, 100],
-    [
-      '0 1px 3px rgba(76, 118, 156, 0.05)',
-      '0 8px 32px rgba(76, 118, 156, 0.12)',
-    ],
-  );
-  const navBorder = useTransform(
-    scrollY,
-    [0, 100],
-    [
-      '1px solid rgba(137, 201, 250, 0.1)',
-      '1px solid rgba(137, 201, 250, 0.3)',
-    ],
-  );
 
   return (
-    <motion.header
-      className="fixed top-0 left-0 right-0 z-50 flex justify-center"
-      style={{
-        paddingTop: navY,
-        paddingLeft: isScrolled ? 16 : 0,
-        paddingRight: isScrolled ? 16 : 0,
-      }}
-    >
-      <motion.nav
-        className="backdrop-blur-xl"
-        style={{
-          width: navWidth,
-          backgroundColor: navBackground,
-          boxShadow: navShadow,
-          padding: navPadding,
-          borderRadius: navBorderRadius,
-          border: navBorder,
-        }}
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-      >
-        <div className="flex items-center justify-between max-w-7xl mx-auto w-full">
+    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 px-4">
+      <nav className="w-full max-w-7xl bg-white/70 backdrop-blur-md rounded-2xl border border-accent/20 shadow-lg shadow-accent/5 px-6 py-3">
+        <div className="flex items-center justify-between w-full">
           {/* Logo */}
           <Link
             href="/"
@@ -83,12 +22,13 @@ export function Navbar() {
               whileHover={{ scale: 1.05, rotate: 5 }}
               whileTap={{ scale: 0.95 }}
             >
-              <img
+              <Image
                 src="/logo.svg"
                 alt="CHAPAL Logo"
                 width={28}
                 height={28}
                 className="drop-shadow-sm"
+                priority
               />
             </motion.div>
             <span className="text-primary font-bold font-heading">CHAPAL</span>
@@ -170,7 +110,7 @@ export function Navbar() {
             )}
           </div>
         </div>
-      </motion.nav>
-    </motion.header>
+      </nav>
+    </header>
   );
 }

@@ -79,8 +79,7 @@ export default function SignUpPage() {
   const passwordStrength = getPasswordStrength(password);
 
   return (
-    <div className="flex min-h-screen items-center justify-center auth-texture px-4 py-12 relative overflow-hidden">
-      {/* Animated background blobs */}
+    <div className="flex min-h-screen items-center justify-center auth-texture px-4 py-24 relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-accent/20 to-primary/10 rounded-full blur-3xl animate-pulse" />
         <div

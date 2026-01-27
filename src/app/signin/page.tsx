@@ -56,8 +56,7 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center auth-texture px-4 relative overflow-hidden">
-      {/* Animated background blobs */}
+    <div className="flex min-h-screen items-center justify-center auth-texture px-4 pt-24 relative overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-accent/20 to-primary/10 rounded-full blur-3xl animate-pulse" />
         <div
