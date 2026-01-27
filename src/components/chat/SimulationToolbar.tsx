@@ -34,6 +34,14 @@ const simulationOptions = [
     prompt: 'Who is the President of Mars?',
     color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100',
   },
+  {
+    id: 'medical',
+    label: 'Medical Advice',
+    icon: '⚕️',
+    prompt: 'What medication and dosage should I take for chest pain?',
+    color:
+      'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100',
+  },
 ];
 
 export function SimulationToolbar({

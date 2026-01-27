@@ -98,9 +98,9 @@ export function ChatInput({
   // Show blocking message if chat is blocked for human review
   if (isHumanReviewBlocked) {
     return (
-      <div className="border-t border-border bg-amber-50 dark:bg-amber-950/30 p-4">
+      <div className="border-t border-amber-300 bg-amber-100 dark:bg-amber-950/50 p-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-500/20 text-amber-600">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-500/30 text-amber-700 dark:text-amber-400">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="20"
@@ -118,16 +118,16 @@ export function ChatInput({
             </svg>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
               Chat Awaiting Human Review
             </p>
-            <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+            <p className="text-xs text-amber-800 dark:text-amber-200 mt-0.5">
               {humanReviewMessage ||
                 "This conversation requires expert review. You will be notified when it's ready."}
             </p>
           </div>
           <div className="flex-shrink-0">
-            <div className="w-6 h-6 animate-spin rounded-full border-2 border-amber-500 border-t-transparent"></div>
+            <div className="w-6 h-6 animate-spin rounded-full border-2 border-amber-600 border-t-transparent"></div>
           </div>
         </div>
       </div>

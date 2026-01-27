@@ -367,35 +367,77 @@ export function detectSafetyIssues(text: string): {
 // ============== Medical/Psychological Content Detection ==============
 
 const MEDICAL_PATTERNS = {
-  medical_advice: {
+  // Serious medical advice - requires admin review
+  serious_medical: {
     patterns: [
-      /\bwhat\s+(?:medication|medicine|drug|pill)\s+(?:should|can)\s+I\s+take\b/gi,
-      /\b(?:symptoms|diagnosis)\s+(?:of|for)\s+(?:\w+\s+)?(?:cancer|disease|disorder|syndrome)\b/gi,
-      /\bam\s+I\s+(?:having|experiencing)\s+(?:a\s+)?(?:heart\s+attack|stroke|seizure)\b/gi,
-      /\b(?:dosage|dose)\s+(?:of|for)\s+\w+\b/gi,
+      // Medication-related
+      /\bwhat\s+(?:medication|medicine|drug|pill)(?:\s+(?:and|or)\s+(?:dosage|dose))?\s+(?:should|can|do)\s+I\s+take/gi,
+      /\bwhat\s+(?:medication|medicine|drug|pill)/gi, // Catch any "what medication" query
+      /\b(?:dosage|dose)\s+(?:of|for|should)/gi,
+      /\bhow\s+(?:much|many)\s+(?:\w+\s+)?(?:mg|milligrams?|pills?|tablets?)\s+(?:should|can)\s+I\s+take/gi,
+      /\bcan\s+I\s+(?:take|mix|combine)\s+(?:\w+\s+)?(?:with|and)\s+\w+/gi, // Drug interactions
+      /\bprescription\s+(?:for|of|drug)/gi,
+      /\bwhat\s+(?:is|are)\s+(?:the\s+)?side\s+effects?\s+of/gi,
+      /\bshould\s+I\s+take\s+(?:medication|medicine|drug|pill)/gi,
+      /\b(?:medication|medicine|drug)\s+for\s+(?:chest\s+)?pain/gi,
+      /\bwhich\s+(?:antibiotics?|medication|medicine|drug|pill)\s+(?:should|can|do)\s+I\s+take/gi, // "which antibiotics should I take"
+      /\b(?:antibiotics?|painkiller|ibuprofen|aspirin|tylenol|paracetamol)\s+(?:for|to\s+treat)/gi, // Specific medications
+
+      // Symptoms and diagnosis
+      /\b(?:symptoms?|signs?)\s+(?:of|for)\s+(?:\w+\s+)?(?:cancer|disease|disorder|syndrome|diabetes|infection)/gi,
+      /\bdo\s+I\s+have\s+(?:cancer|diabetes|disease|disorder|infection|syndrome)/gi,
+      /\bwhat\s+(?:disease|condition|illness)\s+(?:do\s+I\s+have|causes?)/gi,
+      /\bis\s+(?:this|it)\s+(?:a\s+)?(?:symptom|sign)\s+of/gi,
+      /\bhow\s+(?:do\s+I|can\s+I|to)\s+(?:treat|cure|heal|fix)/gi,
+      /\bam\s+I\s+(?:having|experiencing)\s+(?:a\s+)?(?:heart\s+attack|stroke|seizure)/gi,
+      /\bchest\s+pain/gi, // Any mention of chest pain is serious
+
+      // Treatment seeking
+      /\bhow\s+(?:do\s+I|can\s+I|to)\s+(?:diagnose|test\s+for)/gi,
+      /\bwhat\s+(?:tests?|scans?|exams?)\s+(?:should|do)\s+I\s+(?:get|need|take)/gi,
+      /\bshould\s+I\s+(?:stop|start)\s+(?:taking|using)\s+\w+/gi,
+
+      // Specific serious conditions
+      /\b(?:cancer|tumor|diabetes|epilepsy|heart\s+disease|stroke|HIV|AIDS)\s+(?:treatment|cure|therapy)/gi,
     ],
-    severity: 'medium' as AnomalySeverity,
-    message: 'Medical advice request - disclaimer recommended',
+    severity: 'high' as AnomalySeverity,
+    message: 'Serious medical advice request - requires human review',
   },
 
+  // Mental health - requires careful handling
   mental_health: {
     patterns: [
-      /\bI\s+(?:think|feel|believe)\s+I\s+(?:have|am|might\s+have)\s+(?:depression|anxiety|bipolar|PTSD|OCD)\b/gi,
-      /\b(?:diagnosed|diagnosis)\s+(?:with|of)\s+(?:depression|anxiety|bipolar|schizophrenia)\b/gi,
-      /\b(?:therapist|psychiatrist|psychologist|counselor)\s+(?:said|told|diagnosed)\b/gi,
+      /\bI\s+(?:think|feel|believe)\s+I\s+(?:have|am|might\s+have)\s+(?:depression|anxiety|bipolar|PTSD|OCD|schizophrenia)/gi,
+      /\b(?:diagnosed|diagnosis)\s+(?:with|of)\s+(?:depression|anxiety|bipolar|schizophrenia|ADHD|autism)/gi,
+      /\b(?:therapist|psychiatrist|psychologist|counselor)\s+(?:said|told|diagnosed)/gi,
+      /\bwhat\s+(?:medication|medicine)\s+(?:for|treats?)\s+(?:depression|anxiety|bipolar|ADHD)/gi,
+      /\bantidepressant|antipsychotic|mood\s+stabilizer/gi,
     ],
-    severity: 'medium' as AnomalySeverity,
-    message: 'Mental health topic detected - handle with care',
+    severity: 'high' as AnomalySeverity,
+    message: 'Mental health topic detected - requires expert review',
   },
 
+  // Emergency situations - highest priority
   emergency: {
     patterns: [
       /\boverdose|overdosing|poisoned|poisoning\b/gi,
-      /\bchest\s+pain.*(?:emergency|hospital|ambulance)/gi,
-      /\bcan't\s+(?:breathe|breathing)\b/gi,
+      /\bchest\s+pain.*(?:emergency|hospital|ambulance|help)/gi,
+      /\bcan't\s+(?:breathe|breathing)/gi,
+      /\bsevere\s+(?:pain|bleeding|allergic)/gi,
+      /\bunconscious|fainting|passed\s+out/gi,
     ],
-    severity: 'high' as AnomalySeverity,
+    severity: 'critical' as AnomalySeverity,
     message: 'Potential medical emergency - immediate attention recommended',
+  },
+
+  // Moderate medical - lifestyle/general questions
+  moderate_medical: {
+    patterns: [
+      /\bis\s+(?:\w+\s+)?(?:good|bad|safe|dangerous)\s+(?:for|to)\s+(?:my\s+)?health/gi,
+      /\bshould\s+I\s+(?:see|visit|go\s+to)\s+(?:a\s+)?(?:doctor|hospital|specialist)/gi,
+    ],
+    severity: 'medium' as AnomalySeverity,
+    message: 'Medical inquiry detected - may require review',
   },
 };
 

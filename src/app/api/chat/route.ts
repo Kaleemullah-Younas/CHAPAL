@@ -15,6 +15,7 @@ import {
   analyzeLayer1,
   needsSemanticAnalysis,
   getLayer2Indicators,
+  detectMedicalContent,
   DetectionResult,
   getAnomalyTypeLabel,
   AnomalyDetail,
@@ -184,6 +185,12 @@ export async function POST(req: NextRequest) {
       needsSemanticAnalysis(message);
     const layer2Indicators = needsLayer2 ? getLayer2Indicators(message) : [];
 
+    // Check for serious medical content that MUST be flagged for admin review
+    const medicalAnomalies = detectMedicalContent(message);
+    const hasSeriousMedicalQuery = medicalAnomalies.some(
+      a => a.subType === 'serious_medical' || a.subType === 'emergency',
+    );
+
     // Save user message to database with detection results
     const attachmentsForDb = attachments.map(a => ({
       type: a.type,
@@ -227,7 +234,13 @@ export async function POST(req: NextRequest) {
         // Generate AI response for admin review (hidden from user)
         let generatedAIResponse: string | null = null;
         try {
-          const systemPrompt = `You are a helpful AI assistant. Be concise but thorough in your responses. If the user shares images or documents, analyze them carefully and provide relevant insights.`;
+          const systemPrompt = `You are a helpful AI assistant. Be concise but thorough in your responses. If the user shares images or documents, analyze them carefully and provide relevant insights.
+
+IMPORTANT MEDICAL ADVICE GUIDELINES:
+- You CAN provide basic wellness tips like: drink more water, walk more, get enough sleep, eat vegetables, stretch regularly, wash hands, take breaks from screens.
+- You MUST NOT provide serious medical advice including: specific medication recommendations, dosages, diagnosis of conditions, treatment plans, or interpretation of symptoms for specific diseases.
+- For any serious medical questions, politely redirect users to consult a healthcare professional.
+- If asked about medications, dosages, or specific treatments, explain that you cannot provide that information and recommend consulting a doctor or pharmacist.`;
 
           // Generate response without streaming (for admin review)
           const responseChunks: string[] = [];
@@ -453,7 +466,13 @@ export async function POST(req: NextRequest) {
 
         sendThinkingStage('generating_response', 'Generating response...');
 
-        const systemPrompt = `You are a helpful AI assistant. Be concise but thorough in your responses. If the user shares images or documents, analyze them carefully and provide relevant insights.`;
+        const systemPrompt = `You are a helpful AI assistant. Be concise but thorough in your responses. If the user shares images or documents, analyze them carefully and provide relevant insights.
+
+IMPORTANT MEDICAL ADVICE GUIDELINES:
+- You CAN provide basic wellness tips like: drink more water, walk more, get enough sleep, eat vegetables, stretch regularly, wash hands, take breaks from screens.
+- You MUST NOT provide serious medical advice including: specific medication recommendations, dosages, diagnosis of conditions, treatment plans, or interpretation of symptoms for specific diseases.
+- For any serious medical questions, politely redirect users to consult a healthcare professional.
+- If asked about medications, dosages, or specific treatments, explain that you cannot provide that information and recommend consulting a doctor or pharmacist.`;
 
         const maxRetries = 3;
         let lastError: Error | null = null;
@@ -487,6 +506,12 @@ export async function POST(req: NextRequest) {
             let isPendingReview = false;
             let finalAccuracyScore = 100;
 
+            // FORCE admin review if serious medical query detected by pattern matching
+            // This ensures medical queries are ALWAYS flagged regardless of Groq's analysis
+            if (hasSeriousMedicalQuery) {
+              isPendingReview = true;
+            }
+
             if (needsLayer2) {
               sendThinkingStage(
                 'semantic_analysis',
@@ -498,7 +523,26 @@ export async function POST(req: NextRequest) {
                 finalAccuracyScore = semanticResult.accuracyScore;
 
                 // Check if human review is needed
-                isPendingReview = semanticResult.requiresHumanReview;
+                // Also flag for review if medical advice is "serious" severity from Groq
+                const isSeriousMedicalAdvice =
+                  semanticResult.isMedicalAdvice &&
+                  semanticResult.medicalAdviceSeverity === 'serious';
+
+                // Combine: flag if Groq says so OR if pattern matching found serious medical content
+                isPendingReview =
+                  isPendingReview ||
+                  semanticResult.requiresHumanReview ||
+                  isSeriousMedicalAdvice;
+
+                // If serious medical query (from pattern or Groq), set the review reason
+                if (hasSeriousMedicalQuery || isSeriousMedicalAdvice) {
+                  semanticResult.requiresHumanReview = true;
+                  semanticResult.isMedicalAdvice = true;
+                  semanticResult.medicalAdviceSeverity = 'serious';
+                  semanticResult.reviewReason =
+                    semanticResult.medicalAdviceReason ||
+                    'Serious medical advice query detected - requires human expert review';
+                }
 
                 // Send Layer 2 results
                 controller.enqueue(
@@ -510,6 +554,9 @@ export async function POST(req: NextRequest) {
                           semanticResult.hallucinationConfidence,
                         accuracyScore: semanticResult.accuracyScore,
                         isMedicalAdvice: semanticResult.isMedicalAdvice,
+                        medicalAdviceSeverity:
+                          semanticResult.medicalAdviceSeverity,
+                        medicalAdviceReason: semanticResult.medicalAdviceReason,
                         isPsychological: semanticResult.isPsychological,
                         contextType: semanticResult.contextType,
                         userEmotion: semanticResult.userEmotion,
@@ -541,18 +588,27 @@ export async function POST(req: NextRequest) {
               },
             });
 
-            // If Layer 2 requires human review, create anomaly log and BLOCK the chat
-            if (isPendingReview && semanticResult) {
+            // If human review is needed (from Layer 2 OR pattern matching), create anomaly log and BLOCK the chat
+            if (isPendingReview) {
               // Determine the review reason for user-facing message
-              const reviewReason = semanticResult.isMedicalAdvice
-                ? 'medical'
-                : semanticResult.emotionalConcern
-                  ? 'self_harm'
-                  : semanticResult.isHallucination
-                    ? 'hallucination'
-                    : semanticResult.isPsychological
-                      ? 'psychological'
-                      : 'unknown';
+              // Prioritize serious medical advice detection from pattern matching
+              const isSeriousMedicalFromPattern = hasSeriousMedicalQuery;
+              const isSeriousMedicalFromGroq =
+                semanticResult?.isMedicalAdvice &&
+                semanticResult?.medicalAdviceSeverity === 'serious';
+
+              const reviewReason =
+                isSeriousMedicalFromPattern || isSeriousMedicalFromGroq
+                  ? 'serious_medical'
+                  : semanticResult?.isMedicalAdvice
+                    ? 'medical'
+                    : semanticResult?.emotionalConcern
+                      ? 'self_harm'
+                      : semanticResult?.isHallucination
+                        ? 'hallucination'
+                        : semanticResult?.isPsychological
+                          ? 'psychological'
+                          : 'serious_medical'; // Default to serious_medical if from pattern
 
               // Generate user-facing message
               const reviewMessages: Record<string, string> = {
@@ -560,6 +616,8 @@ export async function POST(req: NextRequest) {
                   '🔍 AI response is being reviewed for accuracy. Our team will verify the information and respond shortly.',
                 medical:
                   '⚕️ This query involves medical advice that requires human expert review. A qualified reviewer will respond shortly.',
+                serious_medical:
+                  '⚕️ This question involves serious medical advice that I cannot provide. For your safety, this has been flagged for review by a qualified human expert. Please consult a healthcare professional for medical concerns. An admin will review and respond shortly.',
                 self_harm:
                   '💙 We care about your wellbeing. A trained specialist is reviewing this conversation to provide you with the best support.',
                 psychological:
@@ -575,17 +633,20 @@ export async function POST(req: NextRequest) {
                   userEmail: session.user.email,
                   chatId,
                   anomalyType: reviewReason,
-                  severity: semanticResult.riskLevel,
-                  layer: 'semantic',
+                  severity: semanticResult?.riskLevel || 'high',
+                  layer: semanticResult ? 'semantic' : 'deterministic',
                   userQuery: message,
                   aiResponse: fullResponse,
                   detectionDetails: {
                     layer1: layer1Result,
                     layer2: semanticResult,
+                    medicalAnomalies: medicalAnomalies,
+                    hasSeriousMedicalQuery,
                   } as object,
                   safetyScore: layer1Result.safetyScore,
-                  accuracyScore: semanticResult.accuracyScore,
-                  userEmotion: semanticResult.userEmotion,
+                  accuracyScore: semanticResult?.accuracyScore || 100,
+                  userEmotion:
+                    semanticResult?.userEmotion || layer1Result.userEmotion,
                   status: 'pending', // Awaiting human review
                 },
               });
@@ -644,22 +705,34 @@ export async function POST(req: NextRequest) {
 
             // Determine the review reason message if chat is blocked
             let humanReviewMessage: string | null = null;
-            if (isPendingReview && semanticResult) {
-              const reviewReason = semanticResult.isMedicalAdvice
-                ? 'medical'
-                : semanticResult.emotionalConcern
-                  ? 'self_harm'
-                  : semanticResult.isHallucination
-                    ? 'hallucination'
-                    : semanticResult.isPsychological
-                      ? 'psychological'
-                      : 'unknown';
+            let finalReviewReason: string | null = null;
+            if (isPendingReview) {
+              // Prioritize serious medical advice detection from pattern matching
+              const isSeriousMedicalFromPattern = hasSeriousMedicalQuery;
+              const isSeriousMedicalFromGroq =
+                semanticResult?.isMedicalAdvice &&
+                semanticResult?.medicalAdviceSeverity === 'serious';
+
+              finalReviewReason =
+                isSeriousMedicalFromPattern || isSeriousMedicalFromGroq
+                  ? 'serious_medical'
+                  : semanticResult?.isMedicalAdvice
+                    ? 'medical'
+                    : semanticResult?.emotionalConcern
+                      ? 'self_harm'
+                      : semanticResult?.isHallucination
+                        ? 'hallucination'
+                        : semanticResult?.isPsychological
+                          ? 'psychological'
+                          : 'serious_medical'; // Default to serious_medical if from pattern
 
               const reviewMessages: Record<string, string> = {
                 hallucination:
                   '🔍 AI response is being reviewed for accuracy. Our team will verify the information and respond shortly.',
                 medical:
                   '⚕️ This query involves medical advice that requires human expert review. A qualified reviewer will respond shortly.',
+                serious_medical:
+                  '⚕️ This question involves serious medical advice that I cannot provide. For your safety, this has been flagged for review by a qualified human expert. Please consult a healthcare professional for medical concerns. An admin will review and respond shortly.',
                 self_harm:
                   '💙 We care about your wellbeing. A trained specialist is reviewing this conversation to provide you with the best support.',
                 psychological:
@@ -667,7 +740,7 @@ export async function POST(req: NextRequest) {
                 unknown:
                   '🔒 This response requires human verification. Our team will review and respond shortly.',
               };
-              humanReviewMessage = reviewMessages[reviewReason];
+              humanReviewMessage = reviewMessages[finalReviewReason];
             }
 
             // Send final response with all analysis
@@ -679,18 +752,7 @@ export async function POST(req: NextRequest) {
                   isChatBlocked: isPendingReview, // Chat is blocked for human review
                   accuracyScore: finalAccuracyScore,
                   pendingMessage: isPendingReview ? humanReviewMessage : null,
-                  humanReviewReason:
-                    isPendingReview && semanticResult
-                      ? semanticResult.isMedicalAdvice
-                        ? 'medical'
-                        : semanticResult.emotionalConcern
-                          ? 'self_harm'
-                          : semanticResult.isHallucination
-                            ? 'hallucination'
-                            : semanticResult.isPsychological
-                              ? 'psychological'
-                              : 'unknown'
-                      : null,
+                  humanReviewReason: finalReviewReason,
                 })}\n\n`,
               ),
             );

@@ -99,6 +99,8 @@ interface SemanticAnalysis {
   hallucinationConfidence?: number;
   accuracyScore?: number;
   isMedicalAdvice?: boolean;
+  medicalAdviceSeverity?: 'none' | 'basic' | 'moderate' | 'serious';
+  medicalAdviceReason?: string;
   isPsychological?: boolean;
   contextType?: string;
   userEmotion?: string;
@@ -615,6 +617,82 @@ export default function ChatDetailPage() {
                       recalculatePanelState(updatedHistory);
                       return updatedHistory;
                     });
+                  }
+
+                  // Add semantic anomalies to Live Flag Log
+                  const semanticLogs: AnomalyLog[] = [];
+
+                  // Medical advice detection
+                  if (
+                    semantic.isMedicalAdvice &&
+                    semantic.medicalAdviceSeverity === 'serious'
+                  ) {
+                    semanticLogs.push({
+                      id: `semantic-medical-${Date.now()}`,
+                      timestamp: new Date().toLocaleTimeString(),
+                      type: 'Serious Medical Advice Query',
+                      message:
+                        semantic.medicalAdviceReason ||
+                        'User asking for serious medical advice',
+                      severity: 'high',
+                      layer: 'semantic',
+                    });
+                  }
+
+                  // Hallucination detection
+                  if (
+                    semantic.isHallucination &&
+                    (semantic.hallucinationConfidence || 0) > 50
+                  ) {
+                    semanticLogs.push({
+                      id: `semantic-hallucination-${Date.now()}`,
+                      timestamp: new Date().toLocaleTimeString(),
+                      type: 'Potential Hallucination',
+                      message: `Confidence: ${semantic.hallucinationConfidence}%`,
+                      severity: 'high',
+                      layer: 'semantic',
+                    });
+                  }
+
+                  // Emotional concern detection
+                  if (semantic.emotionalConcern) {
+                    semanticLogs.push({
+                      id: `semantic-emotion-${Date.now()}`,
+                      timestamp: new Date().toLocaleTimeString(),
+                      type: 'Emotional Concern Detected',
+                      message: 'User may be in emotional distress',
+                      severity: 'high',
+                      layer: 'semantic',
+                    });
+                  }
+
+                  // Psychological content detection
+                  if (semantic.isPsychological) {
+                    semanticLogs.push({
+                      id: `semantic-psych-${Date.now()}`,
+                      timestamp: new Date().toLocaleTimeString(),
+                      type: 'Psychological Content',
+                      message: 'Sensitive psychological content detected',
+                      severity: 'medium',
+                      layer: 'semantic',
+                    });
+                  }
+
+                  // Human review required
+                  if (semantic.requiresHumanReview) {
+                    semanticLogs.push({
+                      id: `semantic-review-${Date.now()}`,
+                      timestamp: new Date().toLocaleTimeString(),
+                      type: 'Human Review Required',
+                      message:
+                        semantic.reviewReason || 'Response flagged for review',
+                      severity: 'high',
+                      layer: 'semantic',
+                    });
+                  }
+
+                  if (semanticLogs.length > 0) {
+                    setAnomalyLogs(prev => [...semanticLogs, ...prev]);
                   }
                 } else if (data.retry) {
                   // Show retry notification
