@@ -99,6 +99,7 @@ function ReviewModal({
   onApprove,
   onBlock,
   onCorrect,
+  isLoading,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -106,6 +107,7 @@ function ReviewModal({
   onApprove: () => void;
   onBlock: () => void;
   onCorrect: (response: string) => void;
+  isLoading?: boolean;
 }) {
   const [correctedResponse, setCorrectedResponse] = useState('');
   const [activeAction, setActiveAction] = useState<
@@ -475,7 +477,8 @@ function ReviewModal({
             <div className="mt-6 flex gap-3">
               <button
                 onClick={onClose}
-                className="flex-1 h-11 rounded-xl border border-border font-medium text-muted-foreground hover:bg-muted transition-colors"
+                disabled={isLoading}
+                className="flex-1 h-11 rounded-xl border border-border font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
               >
                 {isLocked ? 'Close' : 'Cancel'}
               </button>
@@ -488,12 +491,39 @@ function ReviewModal({
                       onCorrect(correctedResponse);
                   }}
                   disabled={
+                    isLoading ||
                     !activeAction ||
                     (activeAction === 'correct' && !correctedResponse)
                   }
-                  className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Submit Decision
+                  {isLoading ? (
+                    <>
+                      <svg
+                        className="animate-spin h-4 w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Decision'
+                  )}
                 </button>
               )}
             </div>
@@ -1294,6 +1324,7 @@ export default function AdminDashboard() {
         onApprove={handleApprove}
         onBlock={handleBlock}
         onCorrect={handleCorrect}
+        isLoading={reviewAnomalyMutation.isPending}
       />
 
       {/* Header */}
