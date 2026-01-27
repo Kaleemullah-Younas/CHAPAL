@@ -160,6 +160,10 @@ model AnomalyLog {
   reviewIterations Json? // Array of { response: string, adminInstructions: string, rating: number, timestamp: string }
   iterationCount   Int   @default(0) // Number of regeneration attempts
 
+  // Pinecone vector embedding tracking
+  pineconeVectorId String? // ID of the vector stored in Pinecone for learning
+  isIndexedInPinecone Boolean @default(false) // Whether this feedback has been indexed
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

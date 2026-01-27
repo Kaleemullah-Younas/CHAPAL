@@ -9,6 +9,14 @@ import {
   PUSHER_EVENTS,
 } from '@/lib/pusher-server';
 import { streamGeminiResponse, ChatMessage } from '@/lib/gemini';
+import {
+  storeFeedback,
+  storeApprovedResponse,
+  searchSimilarFeedback,
+  buildLearningContext,
+  getFeedbackStats,
+  batchIndexExistingFeedback,
+} from '@/lib/pinecone';
 
 // Type for user with role
 type UserWithRole = {
@@ -530,6 +538,66 @@ export const adminRouter = router({
           feedbackApplied: true,
         },
       });
+
+      // ============== STORE FEEDBACK IN PINECONE FOR LEARNING ==============
+      // Store approved or corrected responses for AI learning
+      if (action === 'approve' || action === 'correct') {
+        try {
+          const chatMessages = await prisma.message.findMany({
+            where: { chatId: anomaly.chatId },
+            orderBy: { createdAt: 'asc' },
+            take: 10,
+            select: { role: true, content: true },
+          });
+
+          let pineconeVectorId: string | undefined;
+
+          if (action === 'correct' && adminResponse) {
+            // Store as HUMAN RESPONSE - admin wrote this manually
+            pineconeVectorId = await storeFeedback({
+              userQuery: anomaly.userQuery,
+              originalAiResponse: anomaly.aiResponse || '',
+              adminResponse: adminResponse,
+              adminInstructions: reviewNotes || 'Admin provided corrected response',
+              anomalyType: anomaly.anomalyType,
+              severity: anomaly.severity,
+              chatContext: chatMessages.map(m => ({ role: m.role, content: m.content })),
+              rating: 5, // Human responses get top rating
+              iterationCount: 1,
+              userId: anomaly.userId,
+              chatId: anomaly.chatId,
+              anomalyId: anomaly.id,
+              responseSource: 'human', // Admin wrote this
+              wasRegenerated: false,
+            });
+          } else if (action === 'approve') {
+            // Store as AI response approved without changes
+            pineconeVectorId = await storeApprovedResponse({
+              userQuery: anomaly.userQuery,
+              aiResponse: anomaly.aiResponse || '',
+              anomalyType: anomaly.anomalyType,
+              severity: anomaly.severity,
+              chatContext: chatMessages.map(m => ({ role: m.role, content: m.content })),
+              userId: anomaly.userId,
+              chatId: anomaly.chatId,
+              anomalyId: anomaly.id,
+            });
+          }
+
+          if (pineconeVectorId) {
+            await prisma.anomalyLog.update({
+              where: { id },
+              data: {
+                pineconeVectorId,
+                isIndexedInPinecone: true,
+              },
+            });
+            console.log(`[Pinecone] Stored feedback for anomaly ${id}: ${pineconeVectorId}`);
+          }
+        } catch (pineconeError) {
+          console.error('[Pinecone] Error storing feedback:', pineconeError);
+        }
+      }
 
       // Check if this is a Layer 2 semantic review (chat is blocked)
       const chat = await prisma.chat.findUnique({
@@ -1421,6 +1489,28 @@ Admin Feedback: ${iter.adminInstructions}
         )
         .join('\n');
 
+      // ============== PINECONE SIMILARITY SEARCH ==============
+      // Search for similar cases from previous admin corrections
+      let learningContext = '';
+      try {
+        console.log('[Pinecone] Searching for similar feedback for query:', anomaly.userQuery.substring(0, 100));
+        const similarFeedback = await searchSimilarFeedback(anomaly.userQuery, {
+          topK: 5,
+          minRating: 3,
+          includeHumanResponses: true, // Admin-written responses (highest value)
+          includeAiApproved: true, // AI responses approved by admin
+          includeChatHistory: false, // Only use admin-reviewed content for learning
+        });
+        
+        if (similarFeedback.length > 0) {
+          learningContext = buildLearningContext(similarFeedback, 3);
+          console.log(`[Pinecone] Found ${similarFeedback.length} similar cases for learning context`);
+        }
+      } catch (pineconeError) {
+        // Log but don't fail - Pinecone is enhancement, not required
+        console.error('[Pinecone] Error searching similar feedback:', pineconeError);
+      }
+
       const systemPrompt = `You are a helpful AI assistant. The admin has reviewed your previous responses and provided feedback. Generate an improved response based on the following context:
 
 IMPORTANT GUIDELINES:
@@ -1430,7 +1520,7 @@ IMPORTANT GUIDELINES:
 - Be accurate, helpful, and safe
 - Do NOT provide medical diagnoses or specific medication recommendations
 - If the query is about health, recommend seeking professional medical advice
-
+${learningContext}
 USER'S ORIGINAL QUERY:
 ${anomaly.userQuery}
 
@@ -1552,6 +1642,73 @@ Generate an improved response that addresses all the admin's feedback. Be concis
           reviewNotes: `Approved after ${existingIterations.length} iterations. Final rating: ${finalRating || 'N/A'}`,
         },
       });
+
+      // ============== STORE FEEDBACK IN PINECONE FOR LEARNING ==============
+      // This helps the AI learn from admin corrections over time
+      let pineconeVectorId: string | undefined;
+      try {
+        // Get chat context for the feedback
+        const chatMessages = await prisma.message.findMany({
+          where: { chatId: anomaly.chatId },
+          orderBy: { createdAt: 'asc' },
+          take: 10,
+          select: { role: true, content: true },
+        });
+
+        // Determine the response type:
+        // - If iterations > 0: AI was regenerated with feedback, then approved
+        // - If no iterations but response differs: This shouldn't happen in semantic review flow
+        // - If no iterations and response same: Original AI response approved
+        const wasRegenerated = existingIterations.length > 0;
+        
+        if (wasRegenerated) {
+          // AI REGENERATED AND APPROVED - AI wrote it but with admin guidance
+          const lastIteration = existingIterations[existingIterations.length - 1];
+          pineconeVectorId = await storeFeedback({
+            userQuery: anomaly.userQuery,
+            originalAiResponse: anomaly.aiResponse || '',
+            adminResponse: approvedResponse,
+            adminInstructions: lastIteration?.adminInstructions || 'Approved after review',
+            anomalyType: anomaly.anomalyType,
+            severity: anomaly.severity,
+            chatContext: chatMessages.map(m => ({ role: m.role, content: m.content })),
+            rating: finalRating || lastIteration?.rating || 4,
+            iterationCount: existingIterations.length,
+            userId: anomaly.userId,
+            chatId: anomaly.chatId,
+            anomalyId: anomaly.id,
+            responseSource: 'ai', // AI wrote this (with guidance)
+            wasRegenerated: true,
+          });
+        } else {
+          // AI ORIGINAL APPROVED - Original AI response approved without changes
+          pineconeVectorId = await storeApprovedResponse({
+            userQuery: anomaly.userQuery,
+            aiResponse: approvedResponse,
+            anomalyType: anomaly.anomalyType,
+            severity: anomaly.severity,
+            chatContext: chatMessages.map(m => ({ role: m.role, content: m.content })),
+            userId: anomaly.userId,
+            chatId: anomaly.chatId,
+            anomalyId: anomaly.id,
+          });
+        }
+
+        // Update anomaly with Pinecone vector ID
+        if (pineconeVectorId) {
+          await prisma.anomalyLog.update({
+            where: { id: anomalyId },
+            data: {
+              pineconeVectorId,
+              isIndexedInPinecone: true,
+            },
+          });
+          console.log(`[Pinecone] Stored feedback for anomaly ${anomalyId}: ${pineconeVectorId}`);
+        }
+      } catch (pineconeError) {
+        // Log but don't fail - Pinecone is enhancement, not required
+        console.error('[Pinecone] Error storing feedback:', pineconeError);
+      }
 
       // Update the message with approved response
       if (anomaly.message) {
@@ -1695,5 +1852,176 @@ Generate an improved response that addresses all the admin's feedback. Be concis
       });
 
       return { success: true };
+    }),
+
+  // ============== PINECONE LEARNING MANAGEMENT ==============
+
+  // Get Pinecone feedback statistics
+  getPineconeFeedbackStats: isAdmin.query(async () => {
+    try {
+      const stats = await getFeedbackStats();
+      
+      // Also get database stats for comparison
+      const [totalAnomalies, indexedAnomalies, approvedCount, correctedCount] = await Promise.all([
+        prisma.anomalyLog.count(),
+        prisma.anomalyLog.count({ where: { isIndexedInPinecone: true } }),
+        prisma.anomalyLog.count({ where: { status: 'approved' } }),
+        prisma.anomalyLog.count({ where: { status: 'corrected' } }),
+      ]);
+
+      return {
+        pinecone: stats,
+        database: {
+          totalAnomalies,
+          indexedAnomalies,
+          notIndexed: totalAnomalies - indexedAnomalies,
+          approvedCount,
+          correctedCount,
+        },
+      };
+    } catch (error) {
+      console.error('[Pinecone] Error getting stats:', error);
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to get Pinecone stats',
+      });
+    }
+  }),
+
+  // Bootstrap Pinecone with existing approved/corrected anomalies
+  // This indexes all historical feedback that hasn't been indexed yet
+  bootstrapPineconeFeedback: isAdmin.mutation(async () => {
+    try {
+      // Get all approved/corrected anomalies that haven't been indexed
+      const unindexedAnomalies = await prisma.anomalyLog.findMany({
+        where: {
+          OR: [
+            { status: 'approved' },
+            { status: 'corrected' },
+          ],
+          isIndexedInPinecone: false,
+        },
+        include: {
+          message: {
+            include: {
+              chat: {
+                include: {
+                  messages: {
+                    orderBy: { createdAt: 'asc' },
+                    take: 10,
+                    select: { role: true, content: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      console.log(`[Pinecone] Found ${unindexedAnomalies.length} unindexed anomalies to bootstrap`);
+
+      // Prepare feedback items for batch indexing
+      const feedbackItems = unindexedAnomalies
+        .filter(a => a.userQuery && (a.adminResponse || a.aiResponse))
+        .map(a => {
+          const iterations = (a.reviewIterations as Array<{
+            adminInstructions: string;
+            rating: number;
+          }>) || [];
+          const lastIteration = iterations[iterations.length - 1];
+          
+          // Determine response source:
+          // - If status is 'corrected' and adminResponse differs from aiResponse: human wrote it
+          // - If status is 'corrected' and has iterations: AI regenerated with guidance
+          // - If status is 'approved': original AI response was approved
+          const hasIterations = iterations.length > 0;
+          const adminWroteResponse = a.status === 'corrected' && !hasIterations && a.adminResponse !== a.aiResponse;
+          
+          const responseSource: 'human' | 'ai' = adminWroteResponse ? 'human' : 'ai';
+          const wasRegenerated = hasIterations;
+
+          return {
+            userQuery: a.userQuery,
+            originalAiResponse: a.aiResponse || '',
+            adminResponse: a.adminResponse || a.aiResponse || '',
+            adminInstructions: lastIteration?.adminInstructions || a.reviewNotes || 'Admin reviewed',
+            anomalyType: a.anomalyType,
+            severity: a.severity,
+            chatContext: a.message?.chat?.messages.map(m => ({
+              role: m.role,
+              content: m.content,
+            })) || [],
+            rating: lastIteration?.rating || (a.status === 'approved' ? 5 : (responseSource === 'human' ? 5 : 4)),
+            iterationCount: a.iterationCount,
+            userId: a.userId,
+            chatId: a.chatId,
+            anomalyId: a.id,
+            responseSource,
+            wasRegenerated,
+          };
+        });
+
+      // Batch index the feedback
+      const indexedCount = await batchIndexExistingFeedback(feedbackItems);
+
+      // Update the indexed status in database
+      if (indexedCount > 0) {
+        const indexedIds = feedbackItems.slice(0, indexedCount).map(f => f.anomalyId);
+        await prisma.anomalyLog.updateMany({
+          where: { id: { in: indexedIds } },
+          data: { isIndexedInPinecone: true },
+        });
+      }
+
+      return {
+        success: true,
+        totalFound: unindexedAnomalies.length,
+        indexedCount,
+        message: `Successfully indexed ${indexedCount} feedback items into Pinecone`,
+      };
+    } catch (error) {
+      console.error('[Pinecone] Error bootstrapping feedback:', error);
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to bootstrap Pinecone feedback',
+      });
+    }
+  }),
+
+  // Test similarity search with a sample query
+  testSimilaritySearch: isAdmin
+    .input(z.object({ query: z.string().min(1) }))
+    .query(async ({ input }) => {
+      try {
+        const results = await searchSimilarFeedback(input.query, {
+          topK: 5,
+          includeHumanResponses: true,
+          includeAiApproved: true,
+          includeChatHistory: false,
+        });
+
+        return {
+          success: true,
+          query: input.query,
+          resultsCount: results.length,
+          results: results.map(r => ({
+            id: r.id,
+            score: r.score,
+            userQuery: r.metadata.userQuery,
+            adminResponse: r.metadata.adminResponse?.substring(0, 200) + '...',
+            category: r.metadata.category,
+            responseSource: r.metadata.responseSource, // 'human' or 'ai'
+            wasRegenerated: r.metadata.wasRegenerated,
+            rating: r.metadata.rating,
+            anomalyType: r.metadata.anomalyType,
+          })),
+        };
+      } catch (error) {
+        console.error('[Pinecone] Error testing similarity search:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to perform similarity search',
+        });
+      }
     }),
 });
