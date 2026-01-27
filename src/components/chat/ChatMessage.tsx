@@ -70,7 +70,8 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
             </span>
           </div>
           <p className="text-rose-800 font-medium">
-            {message.blockMessage ||
+            {message.content ||
+              message.blockMessage ||
               'Message Blocked. Security protocols triggered. This incident has been logged for Admin review.'}
           </p>
         </div>

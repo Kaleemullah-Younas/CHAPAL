@@ -323,9 +323,24 @@ export async function POST(req: NextRequest) {
       }
 
       // For non-safety blocks (injection, etc.), block without AI generation
+      // Create a blocked assistant message to persist the block state
+      const blockMessage =
+        layer1Result.userMessage ||
+        `Message Blocked: ${primaryAnomaly?.message || 'Security protocols triggered'}. This incident has been logged.`;
+
+      const blockedAssistantMessage = await prisma.message.create({
+        data: {
+          chatId,
+          role: 'assistant',
+          content: blockMessage,
+          isBlocked: true,
+          isPendingReview: false,
+        },
+      });
+
       await prisma.anomalyLog.create({
         data: {
-          messageId: userMessage.id,
+          messageId: blockedAssistantMessage.id,
           userId: session.user.id,
           userEmail: session.user.email,
           chatId,
@@ -362,9 +377,7 @@ export async function POST(req: NextRequest) {
             severity: a.severity,
             message: a.message,
           })),
-          blockMessage:
-            layer1Result.userMessage ||
-            `Message Blocked. ${primaryAnomaly?.message || 'Security protocols triggered'}. This incident has been logged.`,
+          blockMessage: `🚫 ${blockMessage}`,
         },
         messageId: userMessage.id,
       });

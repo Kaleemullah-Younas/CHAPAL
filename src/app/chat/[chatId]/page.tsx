@@ -312,6 +312,8 @@ export default function ChatDetailPage() {
             content: m.content,
             attachments: typedAttachments,
             createdAt: new Date(m.createdAt),
+            isBlocked: m.isBlocked,
+            isWarning: m.isWarning,
             isPendingReview: m.isPendingReview,
             isAdminCorrected: m.isAdminCorrected,
             correctedAt: m.correctedAt ?? undefined,
