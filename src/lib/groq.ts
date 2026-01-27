@@ -93,6 +93,15 @@ export interface SemanticAnalysisResult {
   isHallucination: boolean;
   hallucinationConfidence: number;
   hallucinationReason: string | null;
+  hallucinationType:
+    | 'none'
+    | 'factual'
+    | 'statistical'
+    | 'historical'
+    | 'scientific'
+    | 'prediction'
+    | 'fabrication'; // Type of hallucination
+  hallucinationSeverity: 'none' | 'low' | 'medium' | 'high' | 'critical'; // How severe the hallucination risk is
 
   // Accuracy assessment
   accuracyScore: number; // 0-100
@@ -103,10 +112,17 @@ export interface SemanticAnalysisResult {
   piiConfidence: number;
   piiType: string | null;
 
-  // Context detection
+  // Context detection - Medical
   isMedicalAdvice: boolean;
   medicalAdviceSeverity: 'none' | 'basic' | 'moderate' | 'serious'; // Severity level of medical advice
   medicalAdviceReason: string | null; // Why it's flagged as medical advice
+
+  // Context detection - Mental Health
+  isMentalHealth: boolean;
+  mentalHealthSeverity: 'none' | 'low' | 'moderate' | 'serious' | 'crisis'; // Severity level of mental health content
+  mentalHealthType: string | null; // Type: depression, anxiety, trauma, crisis, etc.
+  mentalHealthReason: string | null; // Why it's flagged as mental health content
+
   isPsychological: boolean;
   contextType: string | null;
   contextConfidence: number;
@@ -128,19 +144,43 @@ Your job is to analyze user queries and AI responses for potential issues that r
 Analyze the following conversation and respond with a JSON object containing your assessment.
 
 IMPORTANT RULES:
-1. For HALLUCINATION: Check if the AI response contains:
+
+1. For HALLUCINATION DETECTION - This is CRITICAL:
+   Check if the AI response contains or the user query may lead to:
    - Made-up facts, dates, or statistics
    - Fictional people, places, or events presented as real
    - Inaccurate technical or scientific information
    - Claims that cannot be verified or are clearly false
+   - Specific numbers, statistics, or data points without sources
+   - Historical events with fabricated details
+   - Quotes attributed to people that may be fabricated
+   - Real-time or current information the AI cannot know
+   - Predictions presented as facts
+   
+   HALLUCINATION TYPES:
+   - "none": No hallucination risk
+   - "factual": Made-up facts about people, places, events
+   - "statistical": Fabricated numbers, percentages, data
+   - "historical": False historical claims or dates
+   - "scientific": Incorrect scientific/medical/technical information
+   - "prediction": Future events stated as facts
+   - "fabrication": Completely invented information (quotes, sources, etc.)
+   
+   HALLUCINATION SEVERITY:
+   - "none": No hallucination risk in query or response
+   - "low": Minor inaccuracies unlikely to cause harm
+   - "medium": Potentially misleading information
+   - "high": Significant misinformation that could mislead user
+   - "critical": Dangerous misinformation (medical, legal, financial false claims)
 
 2. For ACCURACY: Rate how accurate and relevant the AI response is to the user's query (0-100)
 
 3. For CONTEXT DETECTION:
    - Medical advice: User asking for diagnosis, treatment, medication dosage, symptoms interpretation
+   - Mental health: User discussing depression, anxiety, trauma, suicidal thoughts, self-harm, eating disorders, addiction
    - Psychological: User expressing emotional distress, seeking mental health guidance, crisis indicators
-   - PII: User sharing personal information not caught by standard regex (e.g. "my address is [text]", "my id is [unstructured number]", "my phone number is [words]")
-   
+   - PII: User sharing personal information not caught by standard regex
+
 4. For MEDICAL ADVICE SEVERITY - This is CRITICAL:
    IMPORTANT: Base this on what the USER IS ASKING FOR, NOT whether the AI actually provided medical advice.
    Even if the AI correctly refused to give medical advice, if the USER'S QUERY was asking for serious medical advice, it MUST be flagged as "serious".
@@ -149,24 +189,49 @@ IMPORTANT RULES:
    - "basic": User asking about general wellness tips (e.g., "how much water should I drink?", "is walking good for health?")
    - "moderate": User asking about lifestyle health changes (e.g., "should I see a doctor for this?", "is my diet healthy?")
    - "serious": The USER'S QUERY involves ANY of the following - ALWAYS flag as serious regardless of AI response:
-     * Asking about specific medications, drugs, or dosages (e.g., "what medication should I take", "what dosage")
-     * Asking about symptoms of specific diseases/conditions (e.g., "what are symptoms of X")
-     * Asking for diagnosis (e.g., "do I have X", "what condition do I have")
-     * Asking about treatment options for medical conditions
-     * Asking about drug interactions
-     * Asking about medical procedures or surgeries
-     * Questions about prescription drugs
-     * Questions about mental health medications
-     * Asking about chest pain, heart attack, stroke symptoms
+     * Asking about specific medications, drugs, or dosages
+     * Asking about symptoms of specific diseases/conditions
+     * Asking for diagnosis or treatment options
+     * Questions about drug interactions or prescription drugs
      * Any medical question where a wrong answer could cause physical harm
-     
-5. For EMOTION DETECTION:
+
+5. For MENTAL HEALTH SEVERITY - This is CRITICAL:
+   IMPORTANT: Base this on what the USER IS EXPRESSING OR ASKING, not on the AI's response.
+   Mental health content MUST ALWAYS be flagged for human review to ensure appropriate support.
+   
+   - "none": No mental health content in the conversation
+   - "low": General questions about mental wellness, stress management, relaxation techniques
+   - "moderate": User discussing personal mental health struggles, seeking coping strategies, therapy questions
+     * Mentions of feeling anxious, stressed, overwhelmed
+     * Questions about therapy or counseling
+     * Discussing relationship problems affecting mental health
+   - "serious": User shows signs of significant mental health concerns requiring expert attention
+     * Mentions of depression, persistent sadness, hopelessness
+     * Anxiety disorders, panic attacks, phobias
+     * Trauma, PTSD, abuse
+     * Eating disorders (anorexia, bulimia, binge eating)
+     * Substance abuse, addiction
+     * Dissociation, hearing voices
+     * OCD, compulsive behaviors
+   - "crisis": IMMEDIATE CONCERN - User shows signs of:
+     * Suicidal ideation or thoughts of self-harm
+     * Active self-harm behavior
+     * Psychotic symptoms
+     * Immediate danger to self or others
+     * Expressions like "want to die", "no reason to live", "end it all"
+
+   MENTAL HEALTH TYPES:
+   - depression, anxiety, trauma_ptsd, eating_disorder, addiction, self_harm, suicidal, psychosis, ocd, dissociation, grief, relationship_mental_health, general_wellness
+   
+6. For EMOTION DETECTION:
    - Identify the user's emotional state from their message
    - Flag if user shows signs of: distress, suicidal ideation, crisis, extreme anger
    
-6. REQUIRES HUMAN REVIEW if ANY of these are true:
-   - Hallucination detected
+7. REQUIRES HUMAN REVIEW if ANY of these are true:
+   - Hallucination detected (severity medium or higher)
    - Medical advice severity is "serious" (ALWAYS flag - even if AI refused to answer)
+   - Mental health severity is "moderate" or higher (ALWAYS flag for expert review)
+   - Mental health severity is "crisis" (IMMEDIATE flag - highest priority)
    - Psychological/emotional crisis indicators
    - User emotion shows distress or crisis
    - Accuracy score below 70
@@ -176,11 +241,17 @@ Respond ONLY with valid JSON in this exact format:
   "isHallucination": boolean,
   "hallucinationConfidence": number (0-100),
   "hallucinationReason": string or null,
+  "hallucinationType": "none" | "factual" | "statistical" | "historical" | "scientific" | "prediction" | "fabrication",
+  "hallucinationSeverity": "none" | "low" | "medium" | "high" | "critical",
   "accuracyScore": number (0-100),
   "accuracyNotes": string or null,
   "isMedicalAdvice": boolean (true if USER is asking for medical advice, regardless of AI response),
   "medicalAdviceSeverity": "none" | "basic" | "moderate" | "serious" (based on USER'S QUERY, not AI response),
   "medicalAdviceReason": string or null (explain what the user was asking for and why it's this severity),
+  "isMentalHealth": boolean (true if conversation involves mental health topics),
+  "mentalHealthSeverity": "none" | "low" | "moderate" | "serious" | "crisis",
+  "mentalHealthType": string or null (depression, anxiety, trauma_ptsd, eating_disorder, addiction, self_harm, suicidal, psychosis, ocd, dissociation, grief, relationship_mental_health, general_wellness),
+  "mentalHealthReason": string or null (explain what mental health content was detected and why this severity),
   "isPsychological": boolean,
   "contextType": string or null,
   "contextConfidence": number (0-100),
@@ -249,6 +320,8 @@ function getDefaultAnalysisResult(reason: string): SemanticAnalysisResult {
     isHallucination: false,
     hallucinationConfidence: 0,
     hallucinationReason: null,
+    hallucinationType: 'none',
+    hallucinationSeverity: 'none',
     accuracyScore: 85,
     accuracyNotes: `Unable to analyze - ${reason}`,
     isPII: false,
@@ -257,6 +330,10 @@ function getDefaultAnalysisResult(reason: string): SemanticAnalysisResult {
     isMedicalAdvice: false,
     medicalAdviceSeverity: 'none',
     medicalAdviceReason: null,
+    isMentalHealth: false,
+    mentalHealthSeverity: 'none',
+    mentalHealthType: null,
+    mentalHealthReason: null,
     isPsychological: false,
     contextType: null,
     contextConfidence: 0,

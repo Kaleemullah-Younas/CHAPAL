@@ -16,6 +16,8 @@ import {
   needsSemanticAnalysis,
   getLayer2Indicators,
   detectMedicalContent,
+  detectMentalHealthContent,
+  detectHallucinationContent,
   DetectionResult,
   getAnomalyTypeLabel,
   AnomalyDetail,
@@ -189,6 +191,21 @@ export async function POST(req: NextRequest) {
     const medicalAnomalies = detectMedicalContent(message);
     const hasSeriousMedicalQuery = medicalAnomalies.some(
       a => a.subType === 'serious_medical' || a.subType === 'emergency',
+    );
+
+    // Check for serious mental health content that MUST be flagged for admin review
+    const mentalHealthAnomalies = detectMentalHealthContent(message);
+    const hasSeriousMentalHealthQuery = mentalHealthAnomalies.some(
+      a =>
+        a.subType === 'crisis' ||
+        a.subType === 'serious_mental_health' ||
+        a.subType === 'emotional_distress',
+    );
+
+    // Check for hallucination-prone queries that should be flagged for verification
+    const hallucinationAnomalies = detectHallucinationContent(message);
+    const hasHighHallucinationRisk = hallucinationAnomalies.some(
+      a => a.severity === 'high' || a.severity === 'critical',
     );
 
     // Save user message to database with detection results
@@ -512,6 +529,16 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
               isPendingReview = true;
             }
 
+            // FORCE admin review if serious mental health content detected by pattern matching
+            if (hasSeriousMentalHealthQuery) {
+              isPendingReview = true;
+            }
+
+            // FORCE admin review if high hallucination risk detected by pattern matching
+            if (hasHighHallucinationRisk) {
+              isPendingReview = true;
+            }
+
             if (needsLayer2) {
               sendThinkingStage(
                 'semantic_analysis',
@@ -523,16 +550,32 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
                 finalAccuracyScore = semanticResult.accuracyScore;
 
                 // Check if human review is needed
-                // Also flag for review if medical advice is "serious" severity from Groq
+                // Flag for review if medical advice is "serious" severity from Groq
                 const isSeriousMedicalAdvice =
                   semanticResult.isMedicalAdvice &&
                   semanticResult.medicalAdviceSeverity === 'serious';
 
-                // Combine: flag if Groq says so OR if pattern matching found serious medical content
+                // Flag for review if mental health is "moderate" or higher from Groq
+                const isSeriousMentalHealth =
+                  semanticResult.isMentalHealth &&
+                  (semanticResult.mentalHealthSeverity === 'moderate' ||
+                    semanticResult.mentalHealthSeverity === 'serious' ||
+                    semanticResult.mentalHealthSeverity === 'crisis');
+
+                // Flag for review if hallucination risk is medium or higher from Groq
+                const isSeriousHallucination =
+                  semanticResult.isHallucination &&
+                  (semanticResult.hallucinationSeverity === 'medium' ||
+                    semanticResult.hallucinationSeverity === 'high' ||
+                    semanticResult.hallucinationSeverity === 'critical');
+
+                // Combine: flag if Groq says so OR if pattern matching found serious content
                 isPendingReview =
                   isPendingReview ||
                   semanticResult.requiresHumanReview ||
-                  isSeriousMedicalAdvice;
+                  isSeriousMedicalAdvice ||
+                  isSeriousMentalHealth ||
+                  isSeriousHallucination;
 
                 // If serious medical query (from pattern or Groq), set the review reason
                 if (hasSeriousMedicalQuery || isSeriousMedicalAdvice) {
@@ -544,6 +587,38 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
                     'Serious medical advice query detected - requires human expert review';
                 }
 
+                // If serious mental health content (from pattern or Groq), set the review reason
+                if (hasSeriousMentalHealthQuery || isSeriousMentalHealth) {
+                  semanticResult.requiresHumanReview = true;
+                  semanticResult.isMentalHealth = true;
+                  if (
+                    !semanticResult.mentalHealthSeverity ||
+                    semanticResult.mentalHealthSeverity === 'none' ||
+                    semanticResult.mentalHealthSeverity === 'low'
+                  ) {
+                    semanticResult.mentalHealthSeverity = 'serious';
+                  }
+                  semanticResult.reviewReason =
+                    semanticResult.mentalHealthReason ||
+                    'Mental health content detected - requires human expert review for appropriate support';
+                }
+
+                // If high hallucination risk (from pattern or Groq), set the review reason
+                if (hasHighHallucinationRisk || isSeriousHallucination) {
+                  semanticResult.requiresHumanReview = true;
+                  semanticResult.isHallucination = true;
+                  if (
+                    !semanticResult.hallucinationSeverity ||
+                    semanticResult.hallucinationSeverity === 'none' ||
+                    semanticResult.hallucinationSeverity === 'low'
+                  ) {
+                    semanticResult.hallucinationSeverity = 'high';
+                  }
+                  semanticResult.reviewReason =
+                    semanticResult.hallucinationReason ||
+                    'High hallucination risk detected - requires human verification for accuracy';
+                }
+
                 // Send Layer 2 results
                 controller.enqueue(
                   encoder.encode(
@@ -552,11 +627,19 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
                         isHallucination: semanticResult.isHallucination,
                         hallucinationConfidence:
                           semanticResult.hallucinationConfidence,
+                        hallucinationType: semanticResult.hallucinationType,
+                        hallucinationSeverity:
+                          semanticResult.hallucinationSeverity,
                         accuracyScore: semanticResult.accuracyScore,
                         isMedicalAdvice: semanticResult.isMedicalAdvice,
                         medicalAdviceSeverity:
                           semanticResult.medicalAdviceSeverity,
                         medicalAdviceReason: semanticResult.medicalAdviceReason,
+                        isMentalHealth: semanticResult.isMentalHealth,
+                        mentalHealthSeverity:
+                          semanticResult.mentalHealthSeverity,
+                        mentalHealthType: semanticResult.mentalHealthType,
+                        mentalHealthReason: semanticResult.mentalHealthReason,
                         isPsychological: semanticResult.isPsychological,
                         contextType: semanticResult.contextType,
                         userEmotion: semanticResult.userEmotion,
@@ -591,24 +674,64 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
             // If human review is needed (from Layer 2 OR pattern matching), create anomaly log and BLOCK the chat
             if (isPendingReview) {
               // Determine the review reason for user-facing message
-              // Prioritize serious medical advice detection from pattern matching
+              // Prioritize based on severity: crisis > serious > medical/hallucination
               const isSeriousMedicalFromPattern = hasSeriousMedicalQuery;
               const isSeriousMedicalFromGroq =
                 semanticResult?.isMedicalAdvice &&
                 semanticResult?.medicalAdviceSeverity === 'serious';
 
-              const reviewReason =
-                isSeriousMedicalFromPattern || isSeriousMedicalFromGroq
-                  ? 'serious_medical'
-                  : semanticResult?.isMedicalAdvice
-                    ? 'medical'
-                    : semanticResult?.emotionalConcern
-                      ? 'self_harm'
-                      : semanticResult?.isHallucination
-                        ? 'hallucination'
-                        : semanticResult?.isPsychological
-                          ? 'psychological'
-                          : 'serious_medical'; // Default to serious_medical if from pattern
+              const isMentalHealthCrisis =
+                semanticResult?.isMentalHealth &&
+                semanticResult?.mentalHealthSeverity === 'crisis';
+              const isSeriousMentalHealthFromPattern =
+                hasSeriousMentalHealthQuery;
+              const isSeriousMentalHealthFromGroq =
+                semanticResult?.isMentalHealth &&
+                (semanticResult?.mentalHealthSeverity === 'serious' ||
+                  semanticResult?.mentalHealthSeverity === 'moderate');
+
+              const isHighHallucinationFromPattern = hasHighHallucinationRisk;
+              const isHighHallucinationFromGroq =
+                semanticResult?.isHallucination &&
+                (semanticResult?.hallucinationSeverity === 'high' ||
+                  semanticResult?.hallucinationSeverity === 'critical');
+
+              // Determine review reason with priority: crisis > mental_health > medical > hallucination
+              let reviewReason: string;
+              if (isMentalHealthCrisis) {
+                reviewReason = 'mental_health_crisis';
+              } else if (
+                isSeriousMentalHealthFromPattern ||
+                isSeriousMentalHealthFromGroq
+              ) {
+                reviewReason = 'mental_health';
+              } else if (
+                isSeriousMedicalFromPattern ||
+                isSeriousMedicalFromGroq
+              ) {
+                reviewReason = 'serious_medical';
+              } else if (semanticResult?.isMedicalAdvice) {
+                reviewReason = 'medical';
+              } else if (
+                isHighHallucinationFromPattern ||
+                isHighHallucinationFromGroq
+              ) {
+                reviewReason = 'hallucination';
+              } else if (semanticResult?.emotionalConcern) {
+                reviewReason = 'self_harm';
+              } else if (semanticResult?.isPsychological) {
+                reviewReason = 'psychological';
+              } else if (semanticResult?.isHallucination) {
+                reviewReason = 'hallucination';
+              } else if (hasSeriousMentalHealthQuery) {
+                reviewReason = 'mental_health';
+              } else if (hasSeriousMedicalQuery) {
+                reviewReason = 'serious_medical';
+              } else if (hasHighHallucinationRisk) {
+                reviewReason = 'hallucination';
+              } else {
+                reviewReason = 'unknown';
+              }
 
               // Generate user-facing message
               const reviewMessages: Record<string, string> = {
@@ -618,6 +741,10 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
                   '⚕️ This query involves medical advice that requires human expert review. A qualified reviewer will respond shortly.',
                 serious_medical:
                   '⚕️ This question involves serious medical advice that I cannot provide. For your safety, this has been flagged for review by a qualified human expert. Please consult a healthcare professional for medical concerns. An admin will review and respond shortly.',
+                mental_health:
+                  '💙 We care about your wellbeing. Your message involves mental health topics that require careful attention. A trained specialist is reviewing this to provide you with appropriate support.',
+                mental_health_crisis:
+                  "💙 We care deeply about your wellbeing. If you're in crisis, please reach out to a crisis helpline or emergency services immediately. A trained specialist is reviewing this conversation urgently to provide you with the best support.",
                 self_harm:
                   '💙 We care about your wellbeing. A trained specialist is reviewing this conversation to provide you with the best support.',
                 psychological:
@@ -641,7 +768,11 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
                     layer1: layer1Result,
                     layer2: semanticResult,
                     medicalAnomalies: medicalAnomalies,
+                    mentalHealthAnomalies: mentalHealthAnomalies,
+                    hallucinationAnomalies: hallucinationAnomalies,
                     hasSeriousMedicalQuery,
+                    hasSeriousMentalHealthQuery,
+                    hasHighHallucinationRisk,
                   } as object,
                   safetyScore: layer1Result.safetyScore,
                   accuracyScore: semanticResult?.accuracyScore || 100,
@@ -665,7 +796,8 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
                   humanReviewReason: reviewReason,
                   humanReviewMessageId: assistantMessage.id,
                   humanReviewStatus: 'pending',
-                  humanReviewMessage: reviewMessages[reviewReason],
+                  humanReviewMessage:
+                    reviewMessages[reviewReason] || reviewMessages['unknown'],
                   humanReviewLocked: false,
                 },
               });
@@ -707,24 +839,63 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
             let humanReviewMessage: string | null = null;
             let finalReviewReason: string | null = null;
             if (isPendingReview) {
-              // Prioritize serious medical advice detection from pattern matching
+              // Determine review reason with same priority as above
               const isSeriousMedicalFromPattern = hasSeriousMedicalQuery;
               const isSeriousMedicalFromGroq =
                 semanticResult?.isMedicalAdvice &&
                 semanticResult?.medicalAdviceSeverity === 'serious';
 
-              finalReviewReason =
-                isSeriousMedicalFromPattern || isSeriousMedicalFromGroq
-                  ? 'serious_medical'
-                  : semanticResult?.isMedicalAdvice
-                    ? 'medical'
-                    : semanticResult?.emotionalConcern
-                      ? 'self_harm'
-                      : semanticResult?.isHallucination
-                        ? 'hallucination'
-                        : semanticResult?.isPsychological
-                          ? 'psychological'
-                          : 'serious_medical'; // Default to serious_medical if from pattern
+              const isMentalHealthCrisis =
+                semanticResult?.isMentalHealth &&
+                semanticResult?.mentalHealthSeverity === 'crisis';
+              const isSeriousMentalHealthFromPattern =
+                hasSeriousMentalHealthQuery;
+              const isSeriousMentalHealthFromGroq =
+                semanticResult?.isMentalHealth &&
+                (semanticResult?.mentalHealthSeverity === 'serious' ||
+                  semanticResult?.mentalHealthSeverity === 'moderate');
+
+              const isHighHallucinationFromPattern = hasHighHallucinationRisk;
+              const isHighHallucinationFromGroq =
+                semanticResult?.isHallucination &&
+                (semanticResult?.hallucinationSeverity === 'high' ||
+                  semanticResult?.hallucinationSeverity === 'critical');
+
+              // Determine review reason with priority: crisis > mental_health > medical > hallucination
+              if (isMentalHealthCrisis) {
+                finalReviewReason = 'mental_health_crisis';
+              } else if (
+                isSeriousMentalHealthFromPattern ||
+                isSeriousMentalHealthFromGroq
+              ) {
+                finalReviewReason = 'mental_health';
+              } else if (
+                isSeriousMedicalFromPattern ||
+                isSeriousMedicalFromGroq
+              ) {
+                finalReviewReason = 'serious_medical';
+              } else if (semanticResult?.isMedicalAdvice) {
+                finalReviewReason = 'medical';
+              } else if (
+                isHighHallucinationFromPattern ||
+                isHighHallucinationFromGroq
+              ) {
+                finalReviewReason = 'hallucination';
+              } else if (semanticResult?.emotionalConcern) {
+                finalReviewReason = 'self_harm';
+              } else if (semanticResult?.isPsychological) {
+                finalReviewReason = 'psychological';
+              } else if (semanticResult?.isHallucination) {
+                finalReviewReason = 'hallucination';
+              } else if (hasSeriousMentalHealthQuery) {
+                finalReviewReason = 'mental_health';
+              } else if (hasSeriousMedicalQuery) {
+                finalReviewReason = 'serious_medical';
+              } else if (hasHighHallucinationRisk) {
+                finalReviewReason = 'hallucination';
+              } else {
+                finalReviewReason = 'unknown';
+              }
 
               const reviewMessages: Record<string, string> = {
                 hallucination:
@@ -733,6 +904,10 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
                   '⚕️ This query involves medical advice that requires human expert review. A qualified reviewer will respond shortly.',
                 serious_medical:
                   '⚕️ This question involves serious medical advice that I cannot provide. For your safety, this has been flagged for review by a qualified human expert. Please consult a healthcare professional for medical concerns. An admin will review and respond shortly.',
+                mental_health:
+                  '💙 We care about your wellbeing. Your message involves mental health topics that require careful attention. A trained specialist is reviewing this to provide you with appropriate support.',
+                mental_health_crisis:
+                  "💙 We care deeply about your wellbeing. If you're in crisis, please reach out to a crisis helpline or emergency services immediately. A trained specialist is reviewing this conversation urgently to provide you with the best support.",
                 self_harm:
                   '💙 We care about your wellbeing. A trained specialist is reviewing this conversation to provide you with the best support.',
                 psychological:
@@ -740,7 +915,8 @@ IMPORTANT MEDICAL ADVICE GUIDELINES:
                 unknown:
                   '🔒 This response requires human verification. Our team will review and respond shortly.',
               };
-              humanReviewMessage = reviewMessages[finalReviewReason];
+              humanReviewMessage =
+                reviewMessages[finalReviewReason] || reviewMessages['unknown'];
             }
 
             // Send final response with all analysis

@@ -23,6 +23,7 @@ export type AnomalyType =
   | 'policy_violation'
   | 'sudden_spike'
   | 'medical'
+  | 'mental_health'
   | 'hallucination'
   | 'context'
   | 'emotion_crisis';
@@ -467,6 +468,276 @@ export function detectMedicalContent(text: string): AnomalyDetail[] {
   return anomalies;
 }
 
+// ============== Mental Health Content Detection ==============
+
+const MENTAL_HEALTH_PATTERNS = {
+  // Crisis/Emergency - highest priority
+  crisis: {
+    patterns: [
+      /\b(?:want|going|planning)\s+to\s+(?:kill|end|hurt)\s+(?:myself|my\s*life)/gi,
+      /\b(?:suicide|suicidal|end\s+it\s+all|want\s+to\s+die)\b/gi,
+      /\b(?:cut|cutting|harm)\s+(?:myself|my\s*self)\b/gi,
+      /\bI\s+(?:don't|do\s+not)\s+want\s+to\s+(?:live|exist|be\s+alive)\b/gi,
+      /\bself[-\s]?harm(?:ing)?\b/gi,
+      /\bkill\s+myself\b/gi,
+      /\bno\s+(?:reason|point)\s+(?:to|in)\s+(?:live|living|life|go\s+on)\b/gi,
+      /\b(?:plan|planning|prepared)\s+(?:to|for)\s+(?:die|death|suicide|end\s+it)\b/gi,
+      /\beveryone\s+(?:would\s+be|is)\s+better\s+off\s+(?:without\s+me|if\s+I\s+(?:died|was\s+gone))\b/gi,
+    ],
+    severity: 'critical' as AnomalySeverity,
+    message: 'Mental health crisis detected - immediate attention recommended',
+  },
+
+  // Serious mental health - requires expert review
+  serious_mental_health: {
+    patterns: [
+      // Depression/mood disorders
+      /\bI\s+(?:think|feel|believe)\s+I\s+(?:have|am|might\s+have)\s+(?:depression|major\s+depressive|bipolar|manic)\b/gi,
+      /\b(?:diagnosed|diagnosis)\s+(?:with|of)\s+(?:depression|bipolar|schizophrenia|BPD|borderline)\b/gi,
+      /\b(?:feeling|feel|felt)\s+(?:so\s+)?(?:depressed|empty|numb|dead\s+inside)\s+(?:for\s+)?(?:weeks?|months?|years?)?\b/gi,
+      /\b(?:chronic|severe|clinical)\s+(?:depression|anxiety|PTSD)\b/gi,
+
+      // Anxiety disorders
+      /\b(?:panic\s+attacks?|anxiety\s+attacks?|can't\s+stop\s+panicking)\b/gi,
+      /\bI\s+(?:have|suffer\s+from|deal\s+with)\s+(?:severe|crippling|debilitating)\s+anxiety\b/gi,
+      /\b(?:agoraphobia|social\s+anxiety|GAD|generalized\s+anxiety)\b/gi,
+
+      // Trauma/PTSD
+      /\b(?:PTSD|post[-\s]?traumatic|trauma(?:tized|tic)?)\b/gi,
+      /\b(?:flashbacks?|nightmares?)\s+(?:about|from|of)\s+(?:the|my)?\s*(?:abuse|assault|trauma|accident)/gi,
+      /\b(?:sexually|physically|emotionally)\s+(?:abused|assaulted|traumatized)\b/gi,
+
+      // Eating disorders
+      /\b(?:anorexia|bulimia|binge\s+eating|eating\s+disorder)\b/gi,
+      /\b(?:starving|purging|binging)\s+(?:myself|for\s+days)\b/gi,
+      /\bI\s+(?:can't|won't|refuse\s+to)\s+eat\b/gi,
+
+      // Psychotic symptoms
+      /\b(?:hearing\s+voices|voices\s+(?:in\s+my\s+head|telling\s+me))\b/gi,
+      /\b(?:hallucinating|hallucinations?|seeing\s+things\s+(?:that\s+)?aren't\s+there)\b/gi,
+      /\b(?:paranoid|paranoia|people\s+(?:are\s+)?(?:watching|following|out\s+to\s+get)\s+me)\b/gi,
+      /\b(?:schizophren(?:ia|ic)|psychosis|psychotic\s+(?:episode|break))\b/gi,
+
+      // OCD
+      /\b(?:OCD|obsessive[-\s]?compulsive)\b/gi,
+      /\bcompulsive\s+(?:behavior|thoughts?|urges?|actions?)\b/gi,
+      /\bcan't\s+stop\s+(?:thinking\s+about|doing|checking|washing)\b/gi,
+
+      // Self-harm (non-suicidal)
+      /\b(?:urge|urges|want)\s+to\s+(?:cut|hurt|harm)\s+(?:myself|me)\b/gi,
+      /\b(?:burning|scratching|hitting)\s+myself\b/gi,
+
+      // Addiction/substance abuse
+      /\b(?:addicted|addiction)\s+to\s+(?:drugs?|alcohol|pills?|substances?)\b/gi,
+      /\b(?:withdrawal|withdrawing|detox(?:ing)?)\s+(?:from|symptoms)\b/gi,
+      /\bI\s+(?:can't|cannot)\s+stop\s+(?:drinking|using|taking)\b/gi,
+
+      // Dissociation
+      /\b(?:dissociat(?:ing|ion|ed)|depersonalization|derealization)\b/gi,
+      /\b(?:don't\s+feel\s+real|nothing\s+feels\s+real|disconnected\s+from\s+(?:my\s+body|reality))\b/gi,
+    ],
+    severity: 'high' as AnomalySeverity,
+    message: 'Serious mental health topic detected - requires expert review',
+  },
+
+  // Moderate mental health - therapy/medication questions
+  moderate_mental_health: {
+    patterns: [
+      // Seeking therapy/professional help
+      /\bshould\s+I\s+(?:see|talk\s+to|visit)\s+(?:a\s+)?(?:therapist|psychiatrist|psychologist|counselor)\b/gi,
+      /\bhow\s+(?:do\s+I|can\s+I|to)\s+(?:find|get)\s+(?:a\s+)?(?:therapist|mental\s+health\s+help|therapy)\b/gi,
+
+      // Mental health medications
+      /\bwhat\s+(?:medication|medicine|antidepressant|antipsychotic)\s+(?:should|can|for)\b/gi,
+      /\b(?:antidepressant|SSRI|SNRI|benzodiazepine|mood\s+stabilizer|antipsychotic)s?\b/gi,
+      /\b(?:prozac|zoloft|lexapro|xanax|klonopin|lithium|seroquel|abilify)\b/gi,
+
+      // General mental health concerns
+      /\bI\s+(?:think|feel)\s+(?:I\s+)?(?:need|should\s+get)\s+(?:help|therapy|professional\s+help)\b/gi,
+      /\b(?:struggling|dealing)\s+(?:with\s+)?(?:my\s+)?mental\s+health\b/gi,
+      /\bhow\s+to\s+(?:cope|deal)\s+with\s+(?:depression|anxiety|trauma|grief)\b/gi,
+    ],
+    severity: 'medium' as AnomalySeverity,
+    message: 'Mental health inquiry detected - may require review',
+  },
+
+  // Emotional distress - needs monitoring
+  emotional_distress: {
+    patterns: [
+      /\bI\s+(?:feel|am)\s+(?:so\s+)?(?:hopeless|worthless|useless|like\s+a\s+failure)\b/gi,
+      /\b(?:nobody|no\s+one)\s+(?:cares|loves\s+me|understands|would\s+miss\s+me)\b/gi,
+      /\bI\s+(?:can't|cannot)\s+(?:go\s+on|take\s+it\s+anymore|cope|handle\s+this)\b/gi,
+      /\b(?:crying|been\s+crying)\s+(?:all\s+day|for\s+hours|every\s+day|constantly)\b/gi,
+      /\b(?:can't\s+sleep|insomnia|sleepless)\s+(?:for\s+)?(?:days|weeks)\b/gi,
+      /\b(?:lost|losing)\s+(?:all\s+)?(?:hope|interest|motivation|will\s+to\s+live)\b/gi,
+      /\bI\s+(?:feel|am)\s+(?:completely\s+)?alone\b/gi,
+      /\b(?:overwhelming|unbearable)\s+(?:sadness|pain|grief|despair)\b/gi,
+    ],
+    severity: 'high' as AnomalySeverity,
+    message: 'Emotional distress detected - requires attention',
+  },
+};
+
+// Mental health content detection function
+export function detectMentalHealthContent(text: string): AnomalyDetail[] {
+  const anomalies: AnomalyDetail[] = [];
+
+  for (const [category, config] of Object.entries(MENTAL_HEALTH_PATTERNS)) {
+    for (const pattern of config.patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        anomalies.push({
+          type: 'mental_health',
+          subType: category,
+          severity: config.severity,
+          message: config.message,
+          matchedPattern: match[0],
+          confidence: 85,
+          layer: 'semantic', // Mental health content goes to Layer 2 for expert review
+        });
+        break; // Only report once per category
+      }
+    }
+  }
+
+  return anomalies;
+}
+
+// ============== Comprehensive Hallucination Detection ==============
+
+const HALLUCINATION_PATTERNS = {
+  // Factual claims that need verification
+  factual_claims: {
+    patterns: [
+      /\bwho\s+(?:is|was|invented|discovered|founded|created)\b/gi,
+      /\bwhen\s+(?:did|was|were)\s+(?:\w+\s+)*(?:born|died|founded|invented|discovered|created|started|ended)\b/gi,
+      /\bwhat\s+(?:is|was|are|were)\s+the\s+(?:exact|specific|precise)\s+(?:number|amount|date|year|price|value|statistics?)\b/gi,
+      /\bhow\s+(?:many|much|long|old)\s+(?:exactly|precisely|specifically)\b/gi,
+      /\bgive\s+me\s+(?:the\s+)?(?:exact|specific|precise)\s+(?:number|date|statistics?|data|figures?)\b/gi,
+    ],
+    severity: 'medium' as AnomalySeverity,
+    message: 'Query requesting specific factual information - verify accuracy',
+  },
+
+  // Historical/event claims
+  historical_events: {
+    patterns: [
+      /\bwhat\s+(?:happened|occurred)\s+(?:in|on|during)\s+(?:the\s+)?(?:year\s+)?\d{4}\b/gi,
+      /\btell\s+me\s+(?:about\s+)?(?:the\s+)?(?:history|story)\s+of\b/gi,
+      /\b(?:historical|history)\s+(?:facts?|events?|details?)\s+(?:about|of)\b/gi,
+      /\bwhat\s+(?:did|was|were)\s+(?:\w+\s+)+in\s+(?:the\s+)?\d{4}\b/gi,
+    ],
+    severity: 'medium' as AnomalySeverity,
+    message: 'Historical claim query - requires verification',
+  },
+
+  // Scientific/technical claims
+  scientific_claims: {
+    patterns: [
+      /\bwhat\s+(?:is|are)\s+the\s+(?:scientific|proven|verified)\s+(?:facts?|evidence|data)\b/gi,
+      /\b(?:scientifically|medically|clinically)\s+(?:proven|verified|confirmed)\b/gi,
+      /\b(?:studies?|research)\s+(?:show|prove|confirm|demonstrate)\b/gi,
+      /\baccording\s+to\s+(?:science|research|studies|experts?)\b/gi,
+      /\bis\s+it\s+(?:true|fact|proven)\s+that\b/gi,
+    ],
+    severity: 'high' as AnomalySeverity,
+    message: 'Scientific claim query - requires expert verification',
+  },
+
+  // Predictions/future events
+  predictions: {
+    patterns: [
+      /\bpredict\s+(?:the\s+)?(?:future|what\s+will\s+happen)\b/gi,
+      /\bwhat\s+will\s+(?:happen|occur|be)\s+(?:in|by)\s+(?:the\s+)?(?:future|\d{4})\b/gi,
+      /\bwill\s+(?:\w+\s+)?(?:win|lose|succeed|fail|happen|occur)\b/gi,
+      /\b(?:forecast|prophecy|prophesy|foretell)\b/gi,
+    ],
+    severity: 'high' as AnomalySeverity,
+    message: 'Prediction/future event query - high hallucination risk',
+  },
+
+  // Personal/confidential information requests
+  confidential_info: {
+    patterns: [
+      /\btell\s+me\s+(?:a\s+)?(?:secret|unknown|hidden|confidential)\s+(?:facts?|info|information)\s+about\b/gi,
+      /\bwhat\s+(?:are|is)\s+(?:the\s+)?(?:secrets?|hidden\s+(?:facts?|truth))\s+(?:about|of)\b/gi,
+      /\b(?:insider|secret|confidential)\s+(?:information|knowledge|details?)\b/gi,
+    ],
+    severity: 'high' as AnomalySeverity,
+    message: 'Request for confidential/secret information - hallucination risk',
+  },
+
+  // Obscure/niche knowledge
+  obscure_knowledge: {
+    patterns: [
+      /\bwho\s+(?:is|was)\s+the\s+(?:president|king|queen|leader|ruler|CEO|founder)\s+of\s+(?!the\s+(?:USA?|US|United\s+States|UK|France|Germany|Japan|China|India|Russia|Canada|Australia))/gi,
+      /\btell\s+me\s+about\s+(?:a\s+)?(?:obscure|unknown|little[-\s]known|rare)\b/gi,
+      /\bwhat\s+(?:is|are)\s+(?:the\s+)?(?:lesser[-\s]known|obscure|unknown)\s+(?:facts?|details?)\b/gi,
+    ],
+    severity: 'medium' as AnomalySeverity,
+    message: 'Obscure knowledge query - may produce inaccurate response',
+  },
+
+  // Real-time/current information
+  realtime_info: {
+    patterns: [
+      /\bwhat\s+(?:is|are)\s+(?:the\s+)?(?:current|today's|latest|recent)\s+(?:price|stock|news|weather|score|status)\b/gi,
+      /\bright\s+now|at\s+this\s+moment|currently|today|this\s+week|this\s+month\b/gi,
+      /\b(?:live|real[-\s]?time)\s+(?:updates?|information|data|feed)\b/gi,
+    ],
+    severity: 'high' as AnomalySeverity,
+    message: 'Real-time information request - AI may not have current data',
+  },
+
+  // Quotations/exact wording
+  exact_quotes: {
+    patterns: [
+      /\bexact(?:ly)?\s+(?:what\s+)?(?:did\s+)?(?:\w+\s+)?(?:say|said|quote|wrote|write)\b/gi,
+      /\bgive\s+me\s+(?:the\s+)?(?:exact|verbatim|word[-\s]?for[-\s]?word)\s+quote\b/gi,
+      /\bwhat\s+(?:is|was)\s+the\s+(?:exact|precise|verbatim)\s+(?:quote|wording|statement)\b/gi,
+    ],
+    severity: 'high' as AnomalySeverity,
+    message: 'Exact quote request - high risk of fabrication',
+  },
+
+  // Statistics/numbers
+  statistics_numbers: {
+    patterns: [
+      /\bwhat\s+(?:percentage|percent|number|amount)\s+of\b/gi,
+      /\bhow\s+many\s+(?:people|users|customers|deaths|cases)\b/gi,
+      /\bgive\s+me\s+(?:the\s+)?(?:statistics?|numbers?|figures?|data)\s+(?:on|about|for)\b/gi,
+      /\b(?:statistics?|numbers?|figures?)\s+(?:show|indicate|prove|suggest)\b/gi,
+    ],
+    severity: 'high' as AnomalySeverity,
+    message: 'Statistics/numbers request - verify accuracy',
+  },
+};
+
+// Comprehensive hallucination detection function
+export function detectHallucinationContent(text: string): AnomalyDetail[] {
+  const anomalies: AnomalyDetail[] = [];
+
+  for (const [category, config] of Object.entries(HALLUCINATION_PATTERNS)) {
+    for (const pattern of config.patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        anomalies.push({
+          type: 'hallucination',
+          subType: category,
+          severity: config.severity,
+          message: config.message,
+          matchedPattern: match[0],
+          confidence: 75,
+          layer: 'semantic', // Hallucination detection requires semantic analysis
+        });
+        break; // Only report once per category
+      }
+    }
+  }
+
+  return anomalies;
+}
+
 // ============== Policy Violation Detection (Layer 1) ==============
 
 const POLICY_VIOLATION_PATTERNS = {
@@ -751,15 +1022,30 @@ export function needsSemanticAnalysis(text: string): {
 } {
   const reasons: string[] = [];
 
-  // Check for medical/psychological content indicators
+  // Check for medical content indicators
   const medicalAnomalies = detectMedicalContent(text);
   if (medicalAnomalies.length > 0) {
-    reasons.push('Medical/psychological content detected');
+    reasons.push('Medical content detected');
   }
 
-  // Check for hallucination risk indicators
-  const hallucinationAnomalies = detectHallucinationRisk(text);
+  // Check for mental health content indicators
+  const mentalHealthAnomalies = detectMentalHealthContent(text);
+  if (mentalHealthAnomalies.length > 0) {
+    reasons.push('Mental health content detected');
+  }
+
+  // Check for hallucination risk indicators (comprehensive)
+  const hallucinationAnomalies = detectHallucinationContent(text);
   if (hallucinationAnomalies.length > 0) {
+    reasons.push('Potential hallucination risk');
+  }
+
+  // Also check legacy hallucination risk patterns
+  const legacyHallucinationAnomalies = detectHallucinationRisk(text);
+  if (
+    legacyHallucinationAnomalies.length > 0 &&
+    hallucinationAnomalies.length === 0
+  ) {
     reasons.push('Potential hallucination risk');
   }
 
@@ -784,7 +1070,13 @@ export function getLayer2Indicators(text: string): AnomalyDetail[] {
   // Medical content indicators
   indicators.push(...detectMedicalContent(text));
 
-  // Hallucination risk indicators
+  // Mental health content indicators
+  indicators.push(...detectMentalHealthContent(text));
+
+  // Comprehensive hallucination risk indicators
+  indicators.push(...detectHallucinationContent(text));
+
+  // Legacy hallucination risk indicators
   indicators.push(...detectHallucinationRisk(text));
 
   return indicators;
@@ -826,8 +1118,10 @@ export function getAnomalyTypeLabel(type: AnomalyType): string {
       return 'Sudden Spike';
     case 'medical':
       return 'Medical Content';
+    case 'mental_health':
+      return 'Mental Health Content';
     case 'hallucination':
-      return 'Hallucination';
+      return 'Hallucination Risk';
     case 'context':
       return 'Context Issue';
     case 'emotion_crisis':
