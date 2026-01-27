@@ -189,13 +189,13 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
     message.role === 'assistant'
   ) {
     return (
-      <div className="flex gap-4 p-4 bg-indigo-50 dark:bg-indigo-950/30 border-l-4 border-indigo-500">
-        {/* Admin Icon */}
-        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-indigo-500/20 text-indigo-600">
+      <div className="flex gap-4 p-4 bg-muted/30">
+        {/* Admin Avatar */}
+        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-md">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -203,22 +203,28 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="M4.93 4.93l1.41 1.41" />
+            <path d="M17.66 17.66l1.41 1.41" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+            <path d="M6.34 17.66l-1.41 1.41" />
+            <path d="M19.07 4.93l-1.41 1.41" />
           </svg>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-hidden">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-semibold px-2 py-1 bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 rounded-full">
-              👤 Response by Admin
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-medium text-foreground">Admin</span>
+            <span className="text-xs px-1.5 py-0.5 bg-violet-500 text-white rounded font-medium">
+              Human Response
             </span>
             {message.correctedAt && (
               <span className="text-xs text-muted-foreground">
-                {new Date(message.correctedAt).toLocaleDateString()}
+                · {new Date(message.correctedAt).toLocaleDateString()}
               </span>
             )}
           </div>
