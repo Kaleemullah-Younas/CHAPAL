@@ -320,6 +320,9 @@ export const chatRouter = router({
           safetyScore: true,
           accuracyScore: true,
           semanticAnalysis: true,
+          userEmotion: true,
+          emotionIntensity: true,
+          role: true,
         },
       });
 
@@ -363,7 +366,7 @@ export const chatRouter = router({
             )
           : 100;
 
-      // Calculate predominant emotion from anomaly logs
+      // Calculate predominant emotion from all user messages (not just anomaly logs)
       const emotionCounts: Record<string, number> = {};
       const intensityCounts: Record<string, number> = {
         low: 0,
@@ -371,16 +374,15 @@ export const chatRouter = router({
         high: 0,
       };
 
-      for (const log of anomalyLogs) {
+      // Get emotions from user messages (which store emotion data)
+      const userMessages = messages.filter(m => m.role === 'user');
+      for (const msg of userMessages) {
         // Count emotions
-        const emotion = log.userEmotion || 'Neutral';
+        const emotion = msg.userEmotion || 'Neutral';
         emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
 
         // Count emotion intensities
-        const details = log.detectionDetails as {
-          emotionIntensity?: 'low' | 'medium' | 'high';
-        } | null;
-        const intensity = details?.emotionIntensity || 'low';
+        const intensity = (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low';
         intensityCounts[intensity]++;
       }
 
@@ -440,16 +442,11 @@ export const chatRouter = router({
       });
 
       // Prepare detection history for client-side cumulative calculations
-      const emotionsHistory = anomalyLogs.map(log => {
-        const details = log.detectionDetails as {
-          emotionIntensity?: 'low' | 'medium' | 'high';
-        } | null;
+      // Use emotions from user messages (not anomaly logs) for complete history
+      const emotionsHistory = userMessages.map(msg => {
         return {
-          emotion: log.userEmotion || 'Neutral',
-          intensity: (details?.emotionIntensity || 'low') as
-            | 'low'
-            | 'medium'
-            | 'high',
+          emotion: msg.userEmotion || 'Neutral',
+          intensity: (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low',
         };
       });
 

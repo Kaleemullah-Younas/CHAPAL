@@ -80,9 +80,11 @@ model Message {
   createdAt   DateTime @default(now())
 
   // Layer 1 - Anomaly detection fields
-  isBlocked   Boolean @default(false)
-  isWarning   Boolean @default(false)
-  safetyScore Int?
+  isBlocked        Boolean @default(false)
+  isWarning        Boolean @default(false)
+  safetyScore      Int?
+  userEmotion      String? // Detected emotion for cumulative tracking
+  emotionIntensity String? // "low", "medium", "high"
 
   // Layer 2 - Semantic analysis fields
   isPendingReview  Boolean @default(false) // AI response hidden, sent to admin

@@ -473,31 +473,47 @@ export function detectPolicyViolations(text: string): AnomalyDetail[] {
 
 const EMOTION_INDICATORS = {
   Anxious: [
-    /\b(?:worried|anxious|nervous|scared|afraid|frightened|terrified)\b/gi,
+    /\b(?:worried|anxious|nervous|scared|afraid|frightened|terrified|uneasy|tense|restless|panicked|fearful)\b/gi,
     /\bwhat\s+if\b.*\?$/gi,
-    /\bI'm\s+(?:so\s+)?(?:stressed|overwhelmed|panicking)\b/gi,
+    /\bI'm\s+(?:so\s+)?(?:stressed|overwhelmed|panicking|freaking\s+out)\b/gi,
+    /\b(?:can't\s+sleep|losing\s+sleep|sleepless)\b/gi,
   ],
   Angry: [
-    /\b(?:angry|furious|pissed|mad|hate|frustrated|annoyed)\b/gi,
-    /\b(?:damn|hell|wtf|wth)\b/gi,
+    /\b(?:angry|furious|pissed|mad|hate|frustrated|annoyed|irritated|outraged|livid|enraged|infuriated)\b/gi,
+    /\b(?:damn|hell|wtf|wth|ugh|argh)\b/gi,
     /!{2,}/g,
+    /\b(?:so\s+annoying|drives\s+me\s+crazy|can't\s+stand)\b/gi,
   ],
   Sad: [
-    /\b(?:sad|depressed|down|lonely|heartbroken|crying|tears)\b/gi,
+    /\b(?:sad|depressed|down|lonely|heartbroken|crying|tears|miserable|unhappy|devastated|hopeless|grief|grieving|mourning|melancholy|gloomy|upset)\b/gi,
     /\bI\s+(?:miss|lost|can't\s+stop\s+thinking\s+about)\b/gi,
+    /\b(?:feeling\s+low|feeling\s+down|feel\s+empty|feel\s+alone)\b/gi,
   ],
   Happy: [
-    /\b(?:happy|excited|joyful|thrilled|amazing|wonderful|great)\b/gi,
-    /\b(?:thank|thanks|grateful|appreciate)\b/gi,
-    /(?:😊|😄|🎉|❤️|👍)/g,
+    /\b(?:happy|excited|joyful|thrilled|amazing|wonderful|great|fantastic|awesome|excellent|brilliant|delighted|cheerful|pleased|glad|elated|ecstatic|overjoyed|blissful|content|satisfied|fortunate|blessed|lucky|positive|optimistic|upbeat|enthusiastic|pumped|stoked)\b/gi,
+    /\b(?:thank|thanks|grateful|appreciate|thankful|appreciative)\b/gi,
+    /\b(?:love\s+it|loving\s+it|loved\s+it|so\s+good|really\s+good|feels\s+good|feeling\s+good|feel\s+great|feeling\s+great)\b/gi,
+    /\b(?:yay|woohoo|hurray|hooray|woo|nice|cool|sweet|perfect|lovely|beautiful|gorgeous)\b/gi,
+    /(?:😊|😄|🎉|❤️|👍|😃|😁|🙂|☺️|😀|🥰|😍|🤩|💕|✨|🌟|💯|👏|🙌|💪)/g,
+    /\b(?:made\s+my\s+day|best\s+day|having\s+fun|so\s+fun|enjoyed|enjoying)\b/gi,
+    /\b(?:I'm\s+happy|I\s+am\s+happy|feeling\s+happy|so\s+happy|very\s+happy|really\s+happy)\b/gi,
+    /:[-]?\)|\^_\^|<3|xD/gi,
   ],
   Curious: [
-    /\b(?:how|what|why|when|where|who)\b.*\?$/gi,
-    /\bI\s+(?:wonder|want\s+to\s+know|curious)\b/gi,
+    /\b(?:how|what|why|when|where|who)\b.*\?$/gim,
+    /\bI\s+(?:wonder|want\s+to\s+know|curious|interested|wondering)\b/gi,
+    /\b(?:could\s+you\s+(?:explain|tell\s+me)|can\s+you\s+(?:explain|tell\s+me))\b/gi,
+    /\b(?:interested\s+in|fascinated|intrigued)\b/gi,
   ],
   Hostile: [
     /\b(?:stupid|idiot|moron|dumb|useless)\s+(?:AI|bot|assistant|machine)\b/gi,
-    /\byou\s+(?:suck|are\s+useless|don't\s+work)\b/gi,
+    /\byou\s+(?:suck|are\s+useless|don't\s+work|are\s+terrible|are\s+awful)\b/gi,
+    /\b(?:hate\s+this|hate\s+you|worst\s+(?:AI|bot|assistant))\b/gi,
+  ],
+  Distressed: [
+    /\b(?:help\s+me|need\s+help|desperate|hopeless|can't\s+cope|can't\s+take\s+it|falling\s+apart|breaking\s+down|crisis)\b/gi,
+    /\b(?:I\s+don't\s+know\s+what\s+to\s+do|at\s+my\s+wit's\s+end|end\s+of\s+my\s+rope)\b/gi,
+    /\b(?:struggling|suffering|in\s+pain|hurting|aching)\b/gi,
   ],
 };
 

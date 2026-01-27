@@ -163,6 +163,8 @@ export async function POST(req: NextRequest) {
         isBlocked: layer1Result.isBlocked,
         isWarning: layer1Result.isWarning,
         safetyScore: layer1Result.safetyScore,
+        userEmotion: layer1Result.userEmotion,
+        emotionIntensity: layer1Result.emotionIntensity,
         isPendingReview: false, // Will be updated after Layer 2 if needed
       },
     });

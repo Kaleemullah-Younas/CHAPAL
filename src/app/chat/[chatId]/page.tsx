@@ -466,36 +466,25 @@ export default function ChatDetailPage() {
                   setCurrentDetection(detection);
                   setIsAnalyzing(false);
 
-                  // Always add safety score to history (all messages have safety scores)
+                  // Always add safety score and emotion to history (for cumulative chat analysis)
                   setDetectionHistory(prev => {
                     const updatedHistory = {
-                      ...prev,
                       safetyScores: [
                         ...prev.safetyScores,
                         detection.safetyScore,
+                      ],
+                      accuracyScores: prev.accuracyScores,
+                      emotions: [
+                        ...prev.emotions,
+                        {
+                          emotion: detection.userEmotion,
+                          intensity: detection.emotionIntensity || 'low',
+                        },
                       ],
                     };
                     recalculatePanelState(updatedHistory);
                     return updatedHistory;
                   });
-
-                  // Only add emotion to history if there are anomalies (to match server-side data)
-                  if (detection.anomalies.length > 0) {
-                    setDetectionHistory(prev => {
-                      const updatedHistory = {
-                        ...prev,
-                        emotions: [
-                          ...prev.emotions,
-                          {
-                            emotion: detection.userEmotion,
-                            intensity: detection.emotionIntensity || 'low',
-                          },
-                        ],
-                      };
-                      recalculatePanelState(updatedHistory);
-                      return updatedHistory;
-                    });
-                  }
 
                   setCurrentLayer(detection.layer || 'deterministic');
 
