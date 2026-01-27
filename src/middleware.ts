@@ -121,3 +121,5 @@ export default async function authMiddleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };
+
+//
