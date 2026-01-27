@@ -70,7 +70,7 @@ We maintain modular documentation to help you get started quickly.
 ### Prerequisites
 
 - Node.js 18+
-- PostgreSQL
+- PRISMA with MONGO
 - API Keys for Google Gemini & Groq
 
 ### Installation
