@@ -141,6 +141,17 @@ const PII_PATTERNS = {
     severity: 'medium' as AnomalySeverity,
     message: 'Physical address detected',
   },
+
+  // ID Cards (CNIC/National ID)
+  id_card: {
+    patterns: [
+      /\b\d{5}[-\s]?\d{7}[-\s]?\d{1}\b/g, // CNIC format: 12345-1234567-1
+      /\bid\s+card\s+number\s+is\s+\d+/gi,
+      /\bcnic\s+is\s+\d+/gi,
+    ],
+    severity: 'high' as AnomalySeverity,
+    message: 'National ID Card detected',
+  },
 };
 
 export function detectPII(text: string): AnomalyDetail[] {
@@ -643,10 +654,16 @@ export function analyzeLayer1(text: string): DetectionResult {
   // BLOCKED: Critical PII, Critical Safety, or Prompt Injection
   const isBlocked = hasCritical || (hasInjection && hasHigh);
 
-  // WARNING: High severity safety issues, policy violations
+  // WARNING: High severity safety issues, policy violations, or Medium PII
+  const hasMediumPII = layer1Anomalies.some(
+    a => a.type === 'pii' && a.severity === 'medium',
+  );
+
   const isWarning =
     !isBlocked &&
-    (hasHigh || layer1Anomalies.some(a => a.type === 'policy_violation'));
+    (hasHigh ||
+      layer1Anomalies.some(a => a.type === 'policy_violation') ||
+      hasMediumPII);
 
   // Safe: No significant anomalies
   const isSafe = !isBlocked && !isWarning;

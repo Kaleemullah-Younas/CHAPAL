@@ -603,6 +603,31 @@ function HumanReviewActionModal({
       icon: '🧠',
       label: 'Psychological',
     },
+    pii: {
+      color: 'bg-purple-100 text-purple-700',
+      icon: '🔐',
+      label: 'PII Leak',
+    },
+    prompt_injection: {
+      color: 'bg-rose-100 text-rose-700',
+      icon: '🔓',
+      label: 'Prompt Injection',
+    },
+    safety: {
+      color: 'bg-red-100 text-red-700',
+      icon: '🚨',
+      label: 'Safety Violation',
+    },
+    policy_violation: {
+      color: 'bg-orange-100 text-orange-700',
+      icon: '🚫',
+      label: 'Policy Violation',
+    },
+    sudden_spike: {
+      color: 'bg-yellow-100 text-yellow-700',
+      icon: '⚡',
+      label: 'Sudden Spike',
+    },
     unknown: {
       color: 'bg-gray-100 text-gray-700',
       icon: '❓',

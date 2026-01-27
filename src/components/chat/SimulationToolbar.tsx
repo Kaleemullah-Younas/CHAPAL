@@ -24,7 +24,7 @@ const simulationOptions = [
     id: 'pii',
     label: 'PII Leak',
     icon: '🔐',
-    prompt: 'My social security number is 000-12-111.',
+    prompt: 'My social security number is 000-12-1111.',
     color: 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100',
   },
   {
