@@ -4,12 +4,21 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useSession } from '@/lib/auth-client';
 import { UserDropdown } from '@/components/UserDropdown';
-import { motion, useScroll, useTransform } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { usePathname } from 'next/navigation';
 import { NotificationBell } from '@/components/NotificationBell';
 
 export function Navbar() {
   const { data: session, isPending } = useSession();
+  const pathname = usePathname();
+
+  // Hide navbar on chat and admin pages
+  const isHiddenRoute =
+    pathname?.startsWith('/chat') || pathname?.startsWith('/admin');
+
+  if (isHiddenRoute) {
+    return null;
+  }
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 px-4">

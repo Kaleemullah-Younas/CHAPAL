@@ -1684,15 +1684,14 @@ function WarningActionCell({
         <button
           onClick={() => onWarn(anomaly.userId, anomaly.id)}
           disabled={isWarnLoading}
-          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${warningColorClass}`}
+          className={`w-20 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 ${warningColorClass}`}
         >
           {isWarnLoading ? (
-            <span className="flex items-center gap-2">
+            <span className="flex items-center justify-center gap-1">
               <div className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin" />
-              Warning...
             </span>
           ) : (
-            `Warning ${displayWarningCount}`
+            `Warn ${displayWarningCount}`
           )}
         </button>
       )}
@@ -1702,15 +1701,15 @@ function WarningActionCell({
         <button
           onClick={() => onBlock(anomaly)}
           disabled={isWarnLoading}
-          className="px-4 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors disabled:opacity-50"
+          className="w-20 px-3 py-1.5 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors disabled:opacity-50"
         >
-          Block User
+          Block
         </button>
       )}
 
       <button
         onClick={() => onReview(anomaly)}
-        className="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+        className="px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
       >
         Review
       </button>
@@ -2200,42 +2199,37 @@ export default function AdminDashboard() {
       />
 
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-white/80 backdrop-blur-xl">
-        <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="flex items-center gap-4">
+      <header className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 px-4">
+        <nav className="w-full max-w-7xl bg-white/70 backdrop-blur-md rounded-2xl border border-accent/20 shadow-lg shadow-accent/5 px-6 py-3">
+          <div className="flex items-center justify-between w-full">
             <Link
               href="/"
-              className="flex items-center gap-2 text-xl font-bold text-foreground"
+              className="flex items-center gap-2 text-lg font-bold text-foreground hover:text-primary transition-all duration-300"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-primary"
-              >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-                <path d="m9 12 2 2 4-4" />
-              </svg>
-              CHAPAL
+              <Image
+                src="/logo.svg"
+                alt="CHAPAL Logo"
+                width={28}
+                height={28}
+                className="drop-shadow-sm w-7 h-auto"
+                priority
+              />
+              <span className="text-primary font-bold font-heading">
+                CHAPAL
+              </span>
             </Link>
-          </div>
 
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">
-              {session?.user?.name}
-            </span>
-            <button
-              onClick={handleSignOut}
-              className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Sign Out
-            </button>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground font-sans">
+                {session?.user?.name}
+              </span>
+              <button
+                onClick={handleSignOut}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-primary/5"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </nav>
       </header>
