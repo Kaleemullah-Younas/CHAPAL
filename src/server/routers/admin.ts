@@ -210,6 +210,112 @@ export const adminRouter = router({
       return updatedUser;
     }),
 
+  // Issue a warning to a user (max 3 warnings before blocking)
+  // This does NOT close the anomaly - admin can still respond to it
+  warnUser: isAdmin
+    .input(
+      z.object({
+        userId: z.string(),
+        anomalyId: z.string().optional(), // Link to the anomaly that triggered warning (for reference)
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { userId, anomalyId } = input;
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'User not found',
+        });
+      }
+
+      if (user.isBlocked) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'User is already blocked',
+        });
+      }
+
+      // No upper limit on warnings - admin can warn as many times as needed
+      // if (user.warningCount >= 3) ... (removed constraint)
+
+      const newWarningCount = user.warningCount + 1;
+
+      // Update user warning count
+      await prisma.user.update({
+        where: { id: userId },
+        data: { warningCount: newWarningCount },
+      });
+
+      // Get anomaly details for notification (if provided)
+      let chatId: string | null = null;
+      if (anomalyId) {
+        const anomaly = await prisma.anomalyLog.findUnique({
+          where: { id: anomalyId },
+          select: { chatId: true },
+        });
+        chatId = anomaly?.chatId || null;
+      }
+
+      // Send notification to user via Pusher
+      try {
+        const userChannelName = getUserChannelName(userId);
+
+        // Persist notification in database if we have a chatId
+        // This ensures badge count works and notification persists
+        let messageId = `warning-${Date.now()}`;
+
+        if (chatId) {
+          // Create a system message in the chat
+          const warningMessage = await prisma.message.create({
+            data: {
+              chatId,
+              role: 'assistant', // Use assistant role but content indicates system warning
+              content: `⚠️ SYSTEM WARNING: You have been warned ${newWarningCount} time${newWarningCount === 1 ? '' : 's'}.`,
+              isWarning: true,
+              hasNotification: true,
+              notificationRead: false,
+              // We can rely on createdAt for timestamp
+            },
+          });
+          messageId = warningMessage.id;
+        }
+
+        await pusher.trigger(userChannelName, PUSHER_EVENTS.NOTIFICATION, {
+          id: messageId,
+          chatId: chatId || '',
+          chatTitle: 'System Warning',
+          action: 'warning',
+          warningCount: newWarningCount,
+          message: `⚠️ You have been warned ${newWarningCount} time${newWarningCount === 1 ? '' : 's'}.`,
+          timestamp: new Date().toISOString(),
+        });
+        console.log(`[Pusher] Warning notification sent to user ${userId}`);
+      } catch (pusherError) {
+        console.error('[Pusher] Failed to send warning notification:', pusherError);
+      }
+
+      return { success: true, warningCount: newWarningCount };
+    }),
+
+  // Get warning count for a user
+  getUserWarningCount: isAdmin
+    .input(z.object({ userId: z.string() }))
+    .query(async ({ input }) => {
+      const user = await prisma.user.findUnique({
+        where: { id: input.userId },
+        select: { warningCount: true, isBlocked: true },
+      });
+      return {
+        warningCount: user?.warningCount ?? 0,
+        isBlocked: user?.isBlocked ?? false,
+      };
+    }),
+
   // Get admin stats
   getStats: isAdmin.query(async () => {
     const [
@@ -696,15 +802,15 @@ export const adminRouter = router({
       // Find the original AI message that triggered the review
       const pendingMessage = chat.humanReviewMessageId
         ? await prisma.message.findUnique({
-            where: { id: chat.humanReviewMessageId },
-          })
+          where: { id: chat.humanReviewMessageId },
+        })
         : null;
 
       // Also find the associated anomaly log
       const anomalyLog = chat.humanReviewMessageId
         ? await prisma.anomalyLog.findFirst({
-            where: { messageId: chat.humanReviewMessageId },
-          })
+          where: { messageId: chat.humanReviewMessageId },
+        })
         : null;
 
       // Prepare the response content and label based on action

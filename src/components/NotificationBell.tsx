@@ -15,7 +15,7 @@ interface Notification {
   id: string;
   chatId: string;
   chatTitle: string;
-  action: 'approve' | 'block' | 'admin_response';
+  action: 'approve' | 'block' | 'admin_response' | 'warning';
   message: string;
   timestamp: string;
 }
@@ -66,8 +66,9 @@ export function NotificationBell() {
     const channel = pusher.subscribe(channelName);
 
     channel.bind(PUSHER_EVENTS.NOTIFICATION, (data: NotificationEvent) => {
-      // Check if user is currently on the chat page for this notification
-      const isOnChatPage = pathname === `/chat/${data.chatId}`;
+      // For warnings, always show notification
+      // For chat notifications, check if user is currently on that chat page
+      const isOnChatPage = data.chatId && pathname === `/chat/${data.chatId}`;
 
       if (!isOnChatPage) {
         // Add to local notifications
@@ -98,10 +99,26 @@ export function NotificationBell() {
   }, []);
 
   const handleNotificationClick = async (notification: Notification) => {
-    // Mark as read
-    await markNotificationRead.mutateAsync({ messageId: notification.id });
-    // Navigate to chat
-    router.push(`/chat/${notification.chatId}`);
+    // For warning notifications with no chatId, just mark as read
+    if (notification.action === 'warning' && !notification.chatId) {
+      // Remove from local notifications
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      setIsOpen(false);
+      return;
+    }
+    
+    // Mark as read (only for message-based notifications)
+    if (!notification.id.startsWith('warning-')) {
+      await markNotificationRead.mutateAsync({ messageId: notification.id });
+    } else {
+      // For warnings, just remove from local state
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+    }
+    
+    // Navigate to chat if there's a chatId
+    if (notification.chatId) {
+      router.push(`/chat/${notification.chatId}`);
+    }
     setIsOpen(false);
   };
 
@@ -163,6 +180,26 @@ export function NotificationBell() {
               strokeLinejoin="round"
             >
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </span>
+        );
+      case 'warning':
+        return (
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
           </span>
         );

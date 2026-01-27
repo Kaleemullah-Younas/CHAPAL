@@ -356,13 +356,12 @@ function ReviewModal({
                 <button
                   onClick={() => !isLocked && setActiveAction('approve')}
                   disabled={isLocked}
-                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                    isLocked
-                      ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
-                      : activeAction === 'approve'
-                        ? 'border-emerald-500 bg-emerald-50'
-                        : 'border-border hover:border-emerald-300 hover:bg-emerald-50/50'
-                  }`}
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${isLocked
+                    ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
+                    : activeAction === 'approve'
+                      ? 'border-emerald-500 bg-emerald-50'
+                      : 'border-border hover:border-emerald-300 hover:bg-emerald-50/50'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
@@ -398,13 +397,12 @@ function ReviewModal({
                 <button
                   onClick={() => !isLocked && setActiveAction('block')}
                   disabled={isLocked}
-                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                    isLocked
-                      ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
-                      : activeAction === 'block'
-                        ? 'border-rose-500 bg-rose-50'
-                        : 'border-border hover:border-rose-300 hover:bg-rose-50/50'
-                  }`}
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${isLocked
+                    ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
+                    : activeAction === 'block'
+                      ? 'border-rose-500 bg-rose-50'
+                      : 'border-border hover:border-rose-300 hover:bg-rose-50/50'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
@@ -440,13 +438,12 @@ function ReviewModal({
                 <button
                   onClick={() => !isLocked && setActiveAction('correct')}
                   disabled={isLocked}
-                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                    isLocked
-                      ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
-                      : activeAction === 'correct'
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50 hover:bg-primary/5'
-                  }`}
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${isLocked
+                    ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
+                    : activeAction === 'correct'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50 hover:bg-primary/5'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -746,11 +743,10 @@ function HumanReviewActionModal({
             {/* Option A: Approve AI Response */}
             <button
               onClick={() => setActiveAction('approve')}
-              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                activeAction === 'approve'
-                  ? 'border-emerald-500 bg-emerald-50'
-                  : 'border-border hover:border-emerald-300 hover:bg-emerald-50/50'
-              }`}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${activeAction === 'approve'
+                ? 'border-emerald-500 bg-emerald-50'
+                : 'border-border hover:border-emerald-300 hover:bg-emerald-50/50'
+                }`}
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
@@ -785,11 +781,10 @@ function HumanReviewActionModal({
             {/* Option B: Block User Account */}
             <button
               onClick={() => setActiveAction('block')}
-              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                activeAction === 'block'
-                  ? 'border-rose-500 bg-rose-50'
-                  : 'border-border hover:border-rose-300 hover:bg-rose-50/50'
-              }`}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${activeAction === 'block'
+                ? 'border-rose-500 bg-rose-50'
+                : 'border-border hover:border-rose-300 hover:bg-rose-50/50'
+                }`}
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
@@ -824,11 +819,10 @@ function HumanReviewActionModal({
             {/* Option C: Write Custom Response */}
             <button
               onClick={() => setActiveAction('respond')}
-              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                activeAction === 'respond'
-                  ? 'border-indigo-500 bg-indigo-50'
-                  : 'border-border hover:border-indigo-300 hover:bg-indigo-50/50'
-              }`}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${activeAction === 'respond'
+                ? 'border-indigo-500 bg-indigo-50'
+                : 'border-border hover:border-indigo-300 hover:bg-indigo-50/50'
+                }`}
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
@@ -1006,6 +1000,112 @@ function ConfirmModal({
   );
 }
 
+// Warning Action Cell - Shows warning buttons or block button based on user's warning count
+function WarningActionCell({
+  anomaly,
+  onReview,
+  onWarn,
+  onBlock,
+  isWarnLoading,
+}: {
+  anomaly: Anomaly;
+  onReview: (anomaly: Anomaly) => void;
+  onWarn: (userId: string, anomalyId: string) => void;
+  onBlock: (anomaly: Anomaly) => void;
+  isWarnLoading: boolean;
+}) {
+  const { data: warningData, isLoading: warningLoading } =
+    trpc.admin.getUserWarningCount.useQuery(
+      { userId: anomaly.userId },
+      { enabled: anomaly.status === 'pending' }
+    );
+
+  // For non-pending anomalies, just show View button
+  if (anomaly.status !== 'pending') {
+    return (
+      <button
+        onClick={() => onReview(anomaly)}
+        className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+      >
+        View
+      </button>
+    );
+  }
+
+  // Loading state
+  if (warningLoading) {
+    return (
+      <div className="flex items-center justify-end gap-2">
+        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const warningCount = warningData?.warningCount ?? 0;
+  const isBlocked = warningData?.isBlocked ?? false;
+
+  // Determine action buttons
+
+  if (isBlocked) {
+    return (
+      <span className="px-3 py-1.5 text-xs font-medium text-rose-700 bg-rose-100 rounded-full">
+        Blocked
+      </span>
+    );
+  }
+
+  const nextWarning = warningCount + 1;
+  const warningColors = {
+    1: 'text-amber-600 bg-amber-50 hover:bg-amber-100',
+    2: 'text-orange-600 bg-orange-50 hover:bg-orange-100',
+    3: 'text-red-600 bg-red-50 hover:bg-red-100',
+  };
+  // Default color for warnings > 3
+  const defaultWarningColor = 'text-red-700 bg-red-50 hover:bg-red-100';
+  const warningColorClass = (nextWarning <= 3 ? warningColors[nextWarning as 1 | 2 | 3] : defaultWarningColor);
+  const displayWarningCount = nextWarning > 3 ? 3 : nextWarning;
+
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {/* Show Warning button only if less than 3 warnings */}
+      {warningCount < 3 && (
+        <button
+          onClick={() => onWarn(anomaly.userId, anomaly.id)}
+          disabled={isWarnLoading}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${warningColorClass}`}
+        >
+          {isWarnLoading ? (
+            <span className="flex items-center gap-2">
+              <div className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+              Warning...
+            </span>
+          ) : (
+            `Warning ${displayWarningCount}`
+          )}
+        </button>
+      )}
+
+      {/* Show Block button if 3 or more warnings */}
+      {warningCount >= 3 && (
+        <button
+          onClick={() => onBlock(anomaly)}
+          disabled={isWarnLoading}
+          className="px-4 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors disabled:opacity-50"
+        >
+          Block User
+        </button>
+      )}
+
+      <button
+        onClick={() => onReview(anomaly)}
+        className="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+      >
+        Review
+      </button>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<'triage' | 'semantic' | 'users'>(
@@ -1074,11 +1174,11 @@ export default function AdminDashboard() {
   );
   const semanticReviewsData = semanticReviewsQuery.data as
     | {
-        anomalies: SemanticReviewAnomaly[];
-        total: number;
-        pages: number;
-        currentPage: number;
-      }
+      anomalies: SemanticReviewAnomaly[];
+      total: number;
+      pages: number;
+      currentPage: number;
+    }
     | undefined;
   const semanticLoading = semanticReviewsQuery.isLoading;
 
@@ -1095,11 +1195,11 @@ export default function AdminDashboard() {
   );
   const pendingHumanReviewsData = pendingHumanReviewsQuery.data as
     | {
-        chats: PendingHumanReview[];
-        total: number;
-        pages: number;
-        currentPage: number;
-      }
+      chats: PendingHumanReview[];
+      total: number;
+      pages: number;
+      currentPage: number;
+    }
     | undefined;
   const humanReviewsLoading = pendingHumanReviewsQuery.isLoading;
 
@@ -1115,12 +1215,12 @@ export default function AdminDashboard() {
     isLoading: usersLoading,
     refetch,
   } = isSearching && searchQuery
-    ? trpc.admin.searchUsers.useQuery({
+      ? trpc.admin.searchUsers.useQuery({
         query: searchQuery,
         page: currentPage,
         limit: 10,
       })
-    : trpc.admin.getAllUsers.useQuery({ page: currentPage, limit: 10 });
+      : trpc.admin.getAllUsers.useQuery({ page: currentPage, limit: 10 });
 
   // Mutations
   const makeAdminMutation = trpc.admin.makeAdmin.useMutation({
@@ -1160,6 +1260,16 @@ export default function AdminDashboard() {
     },
   });
 
+  // Warn user mutation (for issuing warnings before blocking)
+  const warnUserMutation = trpc.admin.warnUser.useMutation({
+    onSuccess: () => {
+      utils.admin.getAnomalies.invalidate();
+      utils.admin.getUserWarningCount.invalidate();
+      utils.admin.getAnomalyStats.invalidate();
+      utils.admin.getStats.invalidate();
+    },
+  });
+
   // Handler to open human review modal and fetch original AI response
   const handleOpenHumanReviewModal = async (chat: PendingHumanReview) => {
     setSelectedChatForReview(chat);
@@ -1174,8 +1284,8 @@ export default function AdminDashboard() {
       const aiMessage = chat.messages.find(m => m.role === 'assistant');
       setOriginalAIResponse(
         aiMessage?.originalContent ||
-          aiMessage?.content ||
-          'No AI response available',
+        aiMessage?.content ||
+        'No AI response available',
       );
     }
   };
@@ -1281,6 +1391,20 @@ export default function AdminDashboard() {
         reviewNotes: 'Response corrected and sent by admin',
       });
     }
+  };
+
+  // Handler for issuing warnings from the table
+  const handleWarn = async (userId: string, anomalyId: string) => {
+    await warnUserMutation.mutateAsync({ userId, anomalyId });
+  };
+
+  // Handler for blocking from the table (user has 3+ warnings)
+  const handleBlockFromTable = async (anomaly: Anomaly) => {
+    await reviewAnomalyMutation.mutateAsync({
+      id: anomaly.id,
+      action: 'block',
+      reviewNotes: 'Blocked after 3 warnings by admin',
+    });
   };
 
   // Use data from API with explicit typing
@@ -1541,11 +1665,10 @@ export default function AdminDashboard() {
         <div className="flex gap-2 mb-6 border-b border-border">
           <button
             onClick={() => setActiveTab('triage')}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'triage'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'triage'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
           >
             <span className="flex items-center gap-2">
               <svg
@@ -1573,11 +1696,10 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'users'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'users'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
           >
             <span className="flex items-center gap-2">
               <svg
@@ -1600,11 +1722,10 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('semantic')}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'semantic'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'semantic'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
           >
             <span className="flex items-center gap-2">
               <svg
@@ -1656,11 +1777,10 @@ export default function AdminDashboard() {
                       setStatusFilter(status);
                       setAnomalyPage(1);
                     }}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                      statusFilter === status
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                    }`}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${statusFilter === status
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      }`}
                   >
                     {status.charAt(0).toUpperCase() + status.slice(1)}
                   </button>
@@ -1741,15 +1861,14 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-6 py-4">
                             <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                anomaly.severity === 'critical'
-                                  ? 'bg-rose-100 text-rose-700'
-                                  : anomaly.severity === 'high'
-                                    ? 'bg-orange-100 text-orange-700'
-                                    : anomaly.severity === 'medium'
-                                      ? 'bg-amber-100 text-amber-700'
-                                      : 'bg-blue-100 text-blue-700'
-                              }`}
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${anomaly.severity === 'critical'
+                                ? 'bg-rose-100 text-rose-700'
+                                : anomaly.severity === 'high'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : anomaly.severity === 'medium'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}
                             >
                               {anomaly.severity.charAt(0).toUpperCase() +
                                 anomaly.severity.slice(1)}
@@ -1763,36 +1882,27 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-6 py-4">
                             <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                anomaly.status === 'pending'
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : anomaly.status === 'approved'
-                                    ? 'bg-emerald-100 text-emerald-700'
-                                    : anomaly.status === 'blocked'
-                                      ? 'bg-rose-100 text-rose-700'
-                                      : 'bg-blue-100 text-blue-700'
-                              }`}
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${anomaly.status === 'pending'
+                                ? 'bg-amber-100 text-amber-700'
+                                : anomaly.status === 'approved'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : anomaly.status === 'blocked'
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}
                             >
                               {anomaly.status.charAt(0).toUpperCase() +
                                 anomaly.status.slice(1)}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            {anomaly.status === 'pending' ? (
-                              <button
-                                onClick={() => handleReview(anomaly)}
-                                className="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                              >
-                                Review
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleReview(anomaly)}
-                                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
-                              >
-                                View
-                              </button>
-                            )}
+                            <WarningActionCell
+                              anomaly={anomaly}
+                              onReview={handleReview}
+                              onWarn={handleWarn}
+                              onBlock={handleBlockFromTable}
+                              isWarnLoading={warnUserMutation.isPending || reviewAnomalyMutation.isPending}
+                            />
                           </td>
                         </tr>
                       ))}
@@ -1907,13 +2017,12 @@ export default function AdminDashboard() {
                         <div className="flex items-start gap-4">
                           {/* Risk Indicator */}
                           <div
-                            className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              semantic?.riskLevel === 'high'
-                                ? 'bg-rose-100 text-rose-600'
-                                : semantic?.riskLevel === 'medium'
-                                  ? 'bg-amber-100 text-amber-600'
-                                  : 'bg-blue-100 text-blue-600'
-                            }`}
+                            className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${semantic?.riskLevel === 'high'
+                              ? 'bg-rose-100 text-rose-600'
+                              : semantic?.riskLevel === 'medium'
+                                ? 'bg-amber-100 text-amber-600'
+                                : 'bg-blue-100 text-blue-600'
+                              }`}
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -1972,13 +2081,12 @@ export default function AdminDashboard() {
                               )}
                               {semantic?.accuracyScore !== undefined && (
                                 <span
-                                  className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                    semantic.accuracyScore >= 80
-                                      ? 'bg-emerald-100 text-emerald-700'
-                                      : semantic.accuracyScore >= 60
-                                        ? 'bg-amber-100 text-amber-700'
-                                        : 'bg-rose-100 text-rose-700'
-                                  }`}
+                                  className={`px-2 py-1 text-xs font-medium rounded-full ${semantic.accuracyScore >= 80
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : semantic.accuracyScore >= 60
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-rose-100 text-rose-700'
+                                    }`}
                                 >
                                   📊 Accuracy: {semantic.accuracyScore}%
                                 </span>

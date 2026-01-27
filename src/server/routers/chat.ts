@@ -394,8 +394,8 @@ export const chatRouter = router({
       const avgSafetyScore =
         safetyScores.length > 0
           ? Math.round(
-              safetyScores.reduce((a, b) => a + b, 0) / safetyScores.length,
-            )
+            safetyScores.reduce((a, b) => a + b, 0) / safetyScores.length,
+          )
           : 100;
 
       // Calculate average accuracy score only from messages with Layer 2 analysis
@@ -406,8 +406,8 @@ export const chatRouter = router({
       const avgAccuracyScore =
         accuracyScores.length > 0
           ? Math.round(
-              accuracyScores.reduce((a, b) => a + b, 0) / accuracyScores.length,
-            )
+            accuracyScores.reduce((a, b) => a + b, 0) / accuracyScores.length,
+          )
           : 100;
 
       // Calculate predominant emotion from all user messages (not just anomaly logs)
@@ -545,22 +545,38 @@ export const chatRouter = router({
       take: 20, // Limit to 20 most recent notifications
     });
 
-    return notifications.map(n => ({
-      id: n.id,
-      chatId: n.chat.id,
-      chatTitle: n.chat.title || 'Untitled Chat',
-      action: (n.chat.humanReviewStatus || 'admin_response') as
-        | 'approve'
-        | 'block'
-        | 'admin_response',
-      message:
-        n.chat.humanReviewStatus === 'approved'
-          ? 'Admin approved the AI response'
-          : n.chat.humanReviewStatus === 'blocked'
-            ? 'Your account has been blocked'
-            : 'Admin responded to your chat',
-      timestamp: (n.correctedAt || n.createdAt).toISOString(),
-    }));
+    return notifications.map(n => {
+      // Determine action type
+      let action: 'approve' | 'block' | 'admin_response' | 'warning' = 'admin_response';
+      let message = 'Admin responded to your chat';
+
+      // Check specifically for warning messages first (created by admin.warnUser)
+      // These messages are created with isWarning=true and hasNotification=true
+      // We check content to be sure or rely on isWarning if available in selection
+      // Note: isWarning is not in default selection above, need to add it ideally,
+      // but we can infer from content starting with "⚠️ SYSTEM WARNING:"
+      const isSystemWarning = n.content.startsWith('⚠️ SYSTEM WARNING:');
+
+      if (isSystemWarning) {
+        action = 'warning';
+        message = n.content.replace('⚠️ SYSTEM WARNING: ', '⚠️ ');
+      } else if (n.chat.humanReviewStatus === 'approved') {
+        action = 'approve';
+        message = 'Admin approved the AI response';
+      } else if (n.chat.humanReviewStatus === 'blocked') {
+        action = 'block';
+        message = 'Your account has been blocked';
+      }
+
+      return {
+        id: n.id,
+        chatId: n.chat.id,
+        chatTitle: n.chat.title || 'Untitled Chat',
+        action,
+        message,
+        timestamp: (n.correctedAt || n.createdAt).toISOString(),
+      };
+    });
   }),
 
   // Get notification count for badge

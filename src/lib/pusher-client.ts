@@ -54,7 +54,7 @@ export interface NotificationEvent {
   id: string;
   chatId: string;
   chatTitle: string;
-  action: 'approve' | 'block' | 'admin_response';
+  action: 'approve' | 'block' | 'admin_response' | 'warning';
   message: string;
   timestamp: string;
 }
