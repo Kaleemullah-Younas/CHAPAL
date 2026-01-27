@@ -181,7 +181,7 @@ function HeroSection() {
             {[
               { value: '7+', label: 'Detection Modes' },
               { value: '100+', label: 'Messages Analyzed' },
-              { value: '99.2%', label: 'Detection Rate' },
+              { value: '95%', label: 'Detection Rate' },
               { value: '24/7', label: 'AI Monitoring' },
             ].map((stat, index) => (
               <motion.div
