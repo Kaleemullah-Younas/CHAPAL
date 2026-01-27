@@ -515,4 +515,110 @@ export const chatRouter = router({
         },
       };
     }),
+
+  // Get unread notifications for the current user
+  getNotifications: protectedProcedure.query(async ({ ctx }) => {
+    // Find all messages with notifications for user's chats
+    const notifications = await prisma.message.findMany({
+      where: {
+        hasNotification: true,
+        notificationRead: false,
+        chat: {
+          userId: ctx.session.user.id,
+        },
+      },
+      select: {
+        id: true,
+        content: true,
+        isAdminCorrected: true,
+        correctedAt: true,
+        createdAt: true,
+        chat: {
+          select: {
+            id: true,
+            title: true,
+            humanReviewStatus: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20, // Limit to 20 most recent notifications
+    });
+
+    return notifications.map(n => ({
+      id: n.id,
+      chatId: n.chat.id,
+      chatTitle: n.chat.title || 'Untitled Chat',
+      action: (n.chat.humanReviewStatus || 'admin_response') as
+        | 'approve'
+        | 'block'
+        | 'admin_response',
+      message:
+        n.chat.humanReviewStatus === 'approved'
+          ? 'Admin approved the AI response'
+          : n.chat.humanReviewStatus === 'blocked'
+            ? 'Your account has been blocked'
+            : 'Admin responded to your chat',
+      timestamp: (n.correctedAt || n.createdAt).toISOString(),
+    }));
+  }),
+
+  // Get notification count for badge
+  getNotificationCount: protectedProcedure.query(async ({ ctx }) => {
+    const count = await prisma.message.count({
+      where: {
+        hasNotification: true,
+        notificationRead: false,
+        chat: {
+          userId: ctx.session.user.id,
+        },
+      },
+    });
+    return { count };
+  }),
+
+  // Mark a notification as read
+  markNotificationRead: protectedProcedure
+    .input(z.object({ messageId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify the message belongs to user's chat
+      const message = await prisma.message.findFirst({
+        where: {
+          id: input.messageId,
+          chat: {
+            userId: ctx.session.user.id,
+          },
+        },
+      });
+
+      if (!message) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Message not found',
+        });
+      }
+
+      await prisma.message.update({
+        where: { id: input.messageId },
+        data: { notificationRead: true },
+      });
+
+      return { success: true };
+    }),
+
+  // Mark all notifications as read
+  markAllNotificationsRead: protectedProcedure.mutation(async ({ ctx }) => {
+    await prisma.message.updateMany({
+      where: {
+        hasNotification: true,
+        notificationRead: false,
+        chat: {
+          userId: ctx.session.user.id,
+        },
+      },
+      data: { notificationRead: true },
+    });
+
+    return { success: true };
+  }),
 });

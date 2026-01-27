@@ -14,6 +14,7 @@ export const PUSHER_EVENTS = {
   CHAT_UPDATED: 'chat-updated',
   ADMIN_RESPONSE: 'admin-response',
   HUMAN_REVIEW_RESOLVED: 'human-review-resolved',
+  NOTIFICATION: 'notification',
 } as const;
 
 // Helper to get channel name for a user's chats

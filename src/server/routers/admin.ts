@@ -2,7 +2,12 @@ import { z } from 'zod';
 import { router, protectedProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { prisma } from '@/lib/db';
-import { pusher, getChatChannelName, PUSHER_EVENTS } from '@/lib/pusher-server';
+import {
+  pusher,
+  getChatChannelName,
+  getUserChannelName,
+  PUSHER_EVENTS,
+} from '@/lib/pusher-server';
 
 // Type for user with role
 type UserWithRole = {
@@ -479,6 +484,22 @@ export const adminRouter = router({
             },
           );
           console.log('[Pusher] Approve event triggered successfully');
+
+          // Also trigger notification to user channel
+          const userChannelName = getUserChannelName(anomaly.userId);
+          const chatForTitle = await prisma.chat.findUnique({
+            where: { id: anomaly.chatId },
+            select: { title: true },
+          });
+          await pusher.trigger(userChannelName, PUSHER_EVENTS.NOTIFICATION, {
+            id: anomaly.messageId,
+            chatId: anomaly.chatId,
+            chatTitle: chatForTitle?.title || 'Untitled Chat',
+            action: 'approve',
+            message: 'Admin approved the AI response',
+            timestamp: new Date().toISOString(),
+          });
+          console.log('[Pusher] User notification triggered successfully');
         } catch (pusherError) {
           console.error(
             '[Pusher] Failed to trigger approve event:',
@@ -594,6 +615,22 @@ export const adminRouter = router({
             },
           );
           console.log('[Pusher] Event triggered successfully');
+
+          // Also trigger notification to user channel
+          const userChannelName = getUserChannelName(anomaly.userId);
+          const chatForTitle = await prisma.chat.findUnique({
+            where: { id: anomaly.chatId },
+            select: { title: true },
+          });
+          await pusher.trigger(userChannelName, PUSHER_EVENTS.NOTIFICATION, {
+            id: anomaly.messageId,
+            chatId: anomaly.chatId,
+            chatTitle: chatForTitle?.title || 'Untitled Chat',
+            action: 'admin_response',
+            message: 'Admin responded to your chat',
+            timestamp: new Date().toISOString(),
+          });
+          console.log('[Pusher] User notification triggered successfully');
         } catch (pusherError) {
           console.error('[Pusher] Failed to trigger event:', pusherError);
         }
@@ -839,6 +876,23 @@ export const adminRouter = router({
           timestamp: new Date().toISOString(),
         });
         console.log('[Pusher] Event triggered successfully');
+
+        // Also trigger notification to user channel (not for block action since user is blocked)
+        if (action !== 'block') {
+          const userChannelName = getUserChannelName(chat.userId);
+          await pusher.trigger(userChannelName, PUSHER_EVENTS.NOTIFICATION, {
+            id: adminResponseMessageId || chat.humanReviewMessageId,
+            chatId,
+            chatTitle: chat.title || 'Untitled Chat',
+            action,
+            message:
+              action === 'approve'
+                ? 'Admin approved the AI response'
+                : 'Admin responded to your chat',
+            timestamp: new Date().toISOString(),
+          });
+          console.log('[Pusher] User notification triggered successfully');
+        }
       } catch (pusherError) {
         console.error('[Pusher] Failed to trigger event:', pusherError);
       }
