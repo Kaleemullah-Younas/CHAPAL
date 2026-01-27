@@ -367,7 +367,9 @@ export const chatRouter = router({
           userEmotion: true,
           emotionIntensity: true,
           role: true,
+          createdAt: true,
         },
+        orderBy: { createdAt: 'desc' }, // Order by newest first to easily get latest
       });
 
       // Get all anomaly logs for this chat
@@ -387,76 +389,33 @@ export const chatRouter = router({
         },
       });
 
-      // Calculate average safety score from all messages
-      const safetyScores = messages
-        .map(m => m.safetyScore)
-        .filter((s): s is number => s !== null);
-      const avgSafetyScore =
-        safetyScores.length > 0
-          ? Math.round(
-            safetyScores.reduce((a, b) => a + b, 0) / safetyScores.length,
-          )
-          : 100;
+      // Get the latest user message for emotion (messages are ordered desc, so first user message is latest)
+      const latestUserMessage = messages.find(m => m.role === 'user');
 
-      // Calculate average accuracy score only from messages with Layer 2 analysis
-      // (messages where semanticAnalysis is not null had Layer 2 run)
-      const accuracyScores = messages
-        .filter(m => m.semanticAnalysis !== null && m.accuracyScore !== null)
-        .map(m => m.accuracyScore as number);
-      const avgAccuracyScore =
-        accuracyScores.length > 0
-          ? Math.round(
-            accuracyScores.reduce((a, b) => a + b, 0) / accuracyScores.length,
-          )
-          : 100;
-
-      // Calculate predominant emotion from all user messages (not just anomaly logs)
-      const emotionCounts: Record<string, number> = {};
-      const intensityCounts: Record<string, number> = {
-        low: 0,
-        medium: 0,
-        high: 0,
-      };
-
-      // Get emotions from user messages (which store emotion data)
-      const userMessages = messages.filter(m => m.role === 'user');
-      for (const msg of userMessages) {
-        // Count emotions
-        const emotion = msg.userEmotion || 'Neutral';
-        emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
-
-        // Count emotion intensities
-        const intensity =
-          (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low';
-        intensityCounts[intensity]++;
-      }
-
-      // Find the most common emotion
-      let predominantEmotion = 'Neutral';
-      let maxCount = 0;
-      for (const [emotion, count] of Object.entries(emotionCounts)) {
-        if (count > maxCount) {
-          maxCount = count;
-          predominantEmotion = emotion;
-        }
-      }
-
-      // Find the most common intensity
-      let predominantIntensity: 'low' | 'medium' | 'high' = 'low';
-      if (
-        intensityCounts.high > intensityCounts.medium &&
-        intensityCounts.high > intensityCounts.low
-      ) {
-        predominantIntensity = 'high';
-      } else if (intensityCounts.medium > intensityCounts.low) {
-        predominantIntensity = 'medium';
-      }
-
-      // Determine the current layer (semantic if any Layer 2 analysis exists)
-      const hasSemanticAnalysis = anomalyLogs.some(
-        log => log.layer === 'semantic',
+      // Get the latest assistant message for accuracy score (from Layer 2 semantic analysis)
+      const latestAssistantWithAccuracy = messages.find(
+        m =>
+          m.role === 'assistant' &&
+          m.semanticAnalysis !== null &&
+          m.accuracyScore !== null,
       );
-      const currentLayer = hasSemanticAnalysis ? 'semantic' : 'deterministic';
+
+      // Use latest message's values instead of averages
+      const latestSafetyScore = latestUserMessage?.safetyScore ?? 100;
+      const latestAccuracyScore =
+        latestAssistantWithAccuracy?.accuracyScore ?? 100;
+      const latestEmotion = latestUserMessage?.userEmotion || 'Neutral';
+      const latestEmotionIntensity =
+        (latestUserMessage?.emotionIntensity as 'low' | 'medium' | 'high') ||
+        'low';
+
+      // Determine the current layer based on the latest assistant message
+      const latestAssistantMessage = messages.find(m => m.role === 'assistant');
+      const hasLatestSemanticAnalysis =
+        latestAssistantMessage?.semanticAnalysis !== null;
+      const currentLayer = hasLatestSemanticAnalysis
+        ? 'semantic'
+        : 'deterministic';
 
       // Transform to the format expected by TransparencyPanel
       const logs = anomalyLogs.map(log => {
@@ -486,32 +445,15 @@ export const chatRouter = router({
         };
       });
 
-      // Prepare detection history for client-side cumulative calculations
-      // Use emotions from user messages (not anomaly logs) for complete history
-      const emotionsHistory = userMessages.map(msg => {
-        return {
-          emotion: msg.userEmotion || 'Neutral',
-          intensity:
-            (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low',
-        };
-      });
-
       return {
         logs,
-        // Return aggregated panel state for the whole chat
-        // Always return panel state - use calculated values if available, defaults otherwise
+        // Return latest message's values for the panel (not cumulative)
         panelState: {
-          safetyScore: avgSafetyScore,
-          accuracyScore: avgAccuracyScore,
-          userEmotion: predominantEmotion,
-          emotionIntensity: predominantIntensity,
+          safetyScore: latestSafetyScore,
+          accuracyScore: latestAccuracyScore,
+          userEmotion: latestEmotion,
+          emotionIntensity: latestEmotionIntensity,
           layer: currentLayer as 'deterministic' | 'semantic',
-        },
-        // Return raw detection history for client-side cumulative calculations
-        detectionHistory: {
-          safetyScores,
-          accuracyScores,
-          emotions: emotionsHistory,
         },
       };
     }),
@@ -547,7 +489,8 @@ export const chatRouter = router({
 
     return notifications.map(n => {
       // Determine action type
-      let action: 'approve' | 'block' | 'admin_response' | 'warning' = 'admin_response';
+      let action: 'approve' | 'block' | 'admin_response' | 'warning' =
+        'admin_response';
       let message = 'Admin responded to your chat';
 
       // Check specifically for warning messages first (created by admin.warnUser)

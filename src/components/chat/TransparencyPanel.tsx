@@ -1,6 +1,19 @@
 'use client';
 
 import type { ThinkingStage } from './ThinkingAnimation';
+import {
+  Shield,
+  Lock,
+  MessageCircle,
+  Brain,
+  Sparkles,
+  CheckCircle,
+  Loader,
+  AlertTriangle,
+  Stethoscope,
+  Heart,
+  FileText,
+} from 'lucide-react';
 
 interface AnomalyLog {
   id: string;
@@ -101,21 +114,22 @@ export function TransparencyPanel({
   };
 
   const getThinkingStageIcon = (stage: ThinkingStage | null) => {
+    const iconClass = 'w-5 h-5 text-primary';
     switch (stage) {
       case 'analyzing_safety':
-        return '🛡️';
+        return <Shield className={iconClass} />;
       case 'checking_injection':
-        return '🔒';
+        return <Lock className={iconClass} />;
       case 'detecting_emotion':
-        return '💭';
+        return <MessageCircle className={iconClass} />;
       case 'semantic_analysis':
-        return '🧠';
+        return <Brain className={iconClass} />;
       case 'generating_response':
-        return '✨';
+        return <Sparkles className={iconClass} />;
       case 'complete':
-        return '✅';
+        return <CheckCircle className={iconClass} />;
       default:
-        return '⏳';
+        return <Loader className={iconClass} />;
     }
   };
 
@@ -124,7 +138,7 @@ export function TransparencyPanel({
       {/* Header */}
       <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-primary/5 to-transparent">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="18"
@@ -135,7 +149,7 @@ export function TransparencyPanel({
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-primary"
+              className="text-foreground"
             >
               <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
               <circle cx="12" cy="12" r="3" />
@@ -167,7 +181,7 @@ export function TransparencyPanel({
       {isAnalyzing && thinkingStage && (
         <div className="px-4 py-2 bg-primary/5 border-b border-border">
           <div className="flex items-center gap-2">
-            <span className="text-lg animate-pulse">
+            <span className="animate-pulse">
               {getThinkingStageIcon(thinkingStage)}
             </span>
             <div className="flex-1">
@@ -233,7 +247,7 @@ export function TransparencyPanel({
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="text-purple-500"
+                className="text-foreground"
               >
                 <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
               </svg>
@@ -272,7 +286,7 @@ export function TransparencyPanel({
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="text-emerald-500"
+                className="text-foreground"
               >
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                 <polyline points="22 4 12 14.01 9 11.01" />
@@ -294,8 +308,8 @@ export function TransparencyPanel({
             <span className="text-sm text-muted-foreground">relevance</span>
           </div>
           {accuracyScore < 70 && (
-            <p className="text-xs text-warning mt-1">
-              ⚠️ Low accuracy detected
+            <p className="text-xs text-warning mt-1 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> Low accuracy detected
             </p>
           )}
         </div>
@@ -304,7 +318,7 @@ export function TransparencyPanel({
         {semanticAnalysis && (
           <div className="bg-indigo-50 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-lg">🧠</span>
+              <Brain className="w-4 h-4 text-foreground" />
               <span className="text-sm font-medium text-foreground">
                 Semantic Analysis
               </span>
@@ -314,28 +328,30 @@ export function TransparencyPanel({
             </div>
             <div className="flex flex-wrap gap-2">
               {semanticAnalysis.isHallucination && (
-                <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-700">
-                  ⚠️ Hallucination ({semanticAnalysis.hallucinationConfidence}%)
+                <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-700 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" /> Hallucination (
+                  {semanticAnalysis.hallucinationConfidence}%)
                 </span>
               )}
               {semanticAnalysis.isMedicalAdvice && (
-                <span className="px-2 py-1 rounded-full text-xs bg-amber-100 text-amber-700">
-                  🏥 Medical Content
+                <span className="px-2 py-1 rounded-full text-xs bg-amber-100 text-amber-700 flex items-center gap-1">
+                  <Stethoscope className="w-3 h-3" /> Medical Content
                 </span>
               )}
               {semanticAnalysis.isPsychological && (
-                <span className="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-700">
-                  💭 Psychological
+                <span className="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-700 flex items-center gap-1">
+                  <MessageCircle className="w-3 h-3" /> Psychological
                 </span>
               )}
               {semanticAnalysis.emotionalConcern && (
-                <span className="px-2 py-1 rounded-full text-xs bg-pink-100 text-pink-700">
-                  💗 Emotional Concern
+                <span className="px-2 py-1 rounded-full text-xs bg-pink-100 text-pink-700 flex items-center gap-1">
+                  <Heart className="w-3 h-3" /> Emotional Concern
                 </span>
               )}
               {semanticAnalysis.contextType && (
-                <span className="px-2 py-1 rounded-full text-xs bg-slate-100 text-slate-700">
-                  📋 {semanticAnalysis.contextType}
+                <span className="px-2 py-1 rounded-full text-xs bg-slate-100 text-slate-700 flex items-center gap-1">
+                  <FileText className="w-3 h-3" />{' '}
+                  {semanticAnalysis.contextType}
                 </span>
               )}
               {semanticAnalysis.riskLevel && (
@@ -370,7 +386,7 @@ export function TransparencyPanel({
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-amber-500"
+              className="text-foreground"
             >
               <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
               <line x1="4" x2="4" y1="22" y2="15" />
