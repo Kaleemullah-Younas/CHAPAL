@@ -18,6 +18,8 @@ import {
   detectMedicalContent,
   detectMentalHealthContent,
   detectHallucinationContent,
+  detectSuddenSpike,
+  isUserSpikeBlocked,
   DetectionResult,
   getAnomalyTypeLabel,
   AnomalyDetail,
@@ -78,6 +80,126 @@ export async function POST(req: NextRequest) {
       message: string;
       attachments?: Attachment[];
     };
+
+    // ============== LAYER 1: Sudden Spike Detection (DDoS Protection) ==============
+    // Check for rapid message rate (potential DDoS/abuse)
+    const isSimulatedDdos = message.includes(
+      'Testing rapid message sending for DDoS detection',
+    );
+    const spikeResult = detectSuddenSpike(session.user.id, isSimulatedDdos);
+
+    // If spike detected and should block, block the chat immediately
+    if (spikeResult.shouldBlock && spikeResult.anomaly) {
+      // Get the chat to block it
+      const chatToBlock = await prisma.chat.findFirst({
+        where: {
+          id: chatId,
+          userId: session.user.id,
+        },
+      });
+
+      if (chatToBlock) {
+        // Block the chat
+        await prisma.chat.update({
+          where: { id: chatId },
+          data: {
+            isHumanReviewBlocked: true,
+            humanReviewReason: 'sudden_spike',
+            humanReviewStatus: 'pending',
+            humanReviewMessage: `⚡ This chat has been blocked due to detected message spike (${spikeResult.messageCount} rapid messages). This has been flagged as a potential DDoS attack and sent for admin review.`,
+          },
+        });
+
+        // Create a user message to log the spike
+        const spikeUserMessage = await prisma.message.create({
+          data: {
+            chatId,
+            role: 'user',
+            content: message,
+            isBlocked: true,
+            isWarning: false,
+            safetyScore: 0,
+            userEmotion: 'Suspicious',
+            emotionIntensity: 'high',
+            isPendingReview: true,
+          },
+        });
+
+        // Create blocked assistant message
+        const spikeAssistantMessage = await prisma.message.create({
+          data: {
+            chatId,
+            role: 'assistant',
+            content: '',
+            originalContent: null,
+            isBlocked: true,
+            isPendingReview: true,
+          },
+        });
+
+        // Create anomaly log for admin review
+        await prisma.anomalyLog.create({
+          data: {
+            messageId: spikeAssistantMessage.id,
+            userId: session.user.id,
+            userEmail: session.user.email,
+            chatId,
+            anomalyType: 'sudden_spike',
+            severity: 'critical',
+            layer: 'deterministic',
+            userQuery: message,
+            aiResponse: null,
+            detectionDetails: {
+              anomaly: {
+                type: spikeResult.anomaly.type,
+                subType: spikeResult.anomaly.subType || null,
+                severity: spikeResult.anomaly.severity,
+                message: spikeResult.anomaly.message,
+                matchedPattern: spikeResult.anomaly.matchedPattern || null,
+                confidence: spikeResult.anomaly.confidence,
+                layer: spikeResult.anomaly.layer,
+              },
+              messageCount: spikeResult.messageCount,
+              timestamp: new Date().toISOString(),
+              isSimulation: isSimulatedDdos,
+            },
+            safetyScore: 0,
+            userEmotion: 'Suspicious',
+            status: 'pending',
+          },
+        });
+
+        // Return blocked response
+        return NextResponse.json({
+          blocked: true,
+          chatBlocked: true,
+          layer: 'deterministic',
+          detection: {
+            layer: 'deterministic',
+            isBlocked: true,
+            isWarning: false,
+            isPendingReview: true,
+            isSafe: false,
+            safetyScore: 0,
+            accuracyScore: 100,
+            userEmotion: 'Suspicious',
+            emotionIntensity: 'high',
+            anomalies: [
+              {
+                type: spikeResult.anomaly.type,
+                subType: spikeResult.anomaly.subType,
+                severity: spikeResult.anomaly.severity,
+                message: spikeResult.anomaly.message,
+              },
+            ],
+            blockMessage: `🚫 Message Blocked: ${spikeResult.anomaly.message}. This chat has been blocked and sent for admin review.`,
+            spikeDetected: true,
+            messageCount: spikeResult.messageCount,
+          },
+          messageId: spikeUserMessage.id,
+        });
+      }
+    }
 
     // Verify chat belongs to user
     const chat = await prisma.chat.findFirst({

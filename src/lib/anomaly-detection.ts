@@ -738,6 +738,143 @@ export function detectHallucinationContent(text: string): AnomalyDetail[] {
   return anomalies;
 }
 
+// ============== Sudden Spike Detection (DDoS Simulation) ==============
+
+// In-memory rate tracking per user (in production, use Redis)
+const userMessageRates: Map<
+  string,
+  { timestamps: number[]; blocked: boolean }
+> = new Map();
+
+// Configuration for spike detection
+const SPIKE_CONFIG = {
+  windowMs: 10000, // 10 second window
+  maxMessages: 5, // Max 5 messages in the window
+  blockDurationMs: 60000, // Block for 1 minute after spike
+  simulatedSpikeThreshold: 3, // For simulation, trigger after 3 rapid messages
+};
+
+/**
+ * Check if a user is currently blocked due to spike detection
+ */
+export function isUserSpikeBlocked(userId: string): boolean {
+  const userData = userMessageRates.get(userId);
+  return userData?.blocked ?? false;
+}
+
+/**
+ * Clear spike block for a user (used by admin or after timeout)
+ */
+export function clearUserSpikeBlock(userId: string): void {
+  const userData = userMessageRates.get(userId);
+  if (userData) {
+    userData.blocked = false;
+    userData.timestamps = [];
+  }
+}
+
+/**
+ * Detect sudden spike/DDoS-like behavior
+ * Returns anomaly if spike detected, also sets block flag
+ */
+export function detectSuddenSpike(
+  userId: string,
+  isSimulation: boolean = false,
+): {
+  anomaly: AnomalyDetail | null;
+  shouldBlock: boolean;
+  messageCount: number;
+} {
+  const now = Date.now();
+
+  // Get or create user rate data
+  let userData = userMessageRates.get(userId);
+  if (!userData) {
+    userData = { timestamps: [], blocked: false };
+    userMessageRates.set(userId, userData);
+  }
+
+  // If user is already blocked, return blocked status
+  if (userData.blocked) {
+    return {
+      anomaly: {
+        type: 'sudden_spike',
+        subType: 'rate_blocked',
+        severity: 'critical',
+        message:
+          'User is blocked due to detected message spike (potential DDoS attack)',
+        confidence: 100,
+        layer: 'deterministic',
+      },
+      shouldBlock: true,
+      messageCount: userData.timestamps.length,
+    };
+  }
+
+  // Clean old timestamps outside the window
+  const windowStart = now - SPIKE_CONFIG.windowMs;
+  userData.timestamps = userData.timestamps.filter(t => t > windowStart);
+
+  // Add current timestamp
+  userData.timestamps.push(now);
+
+  const messageCount = userData.timestamps.length;
+  const threshold = isSimulation
+    ? SPIKE_CONFIG.simulatedSpikeThreshold
+    : SPIKE_CONFIG.maxMessages;
+
+  // Check if threshold exceeded
+  if (messageCount > threshold) {
+    // Mark user as blocked
+    userData.blocked = true;
+
+    // Auto-unblock after duration (in production, use proper job queue)
+    setTimeout(() => {
+      clearUserSpikeBlock(userId);
+    }, SPIKE_CONFIG.blockDurationMs);
+
+    return {
+      anomaly: {
+        type: 'sudden_spike',
+        subType: 'ddos_detected',
+        severity: 'critical',
+        message: `Sudden message spike detected (${messageCount} messages in ${SPIKE_CONFIG.windowMs / 1000}s) - potential DDoS attack`,
+        matchedPattern: `${messageCount} msgs/${SPIKE_CONFIG.windowMs / 1000}s`,
+        confidence: 95,
+        layer: 'deterministic',
+      },
+      shouldBlock: true,
+      messageCount,
+    };
+  }
+
+  // Warning if approaching threshold
+  if (messageCount >= threshold - 1) {
+    return {
+      anomaly: {
+        type: 'sudden_spike',
+        subType: 'rate_warning',
+        severity: 'high',
+        message: `High message rate detected (${messageCount} messages in ${SPIKE_CONFIG.windowMs / 1000}s) - approaching limit`,
+        matchedPattern: `${messageCount} msgs/${SPIKE_CONFIG.windowMs / 1000}s`,
+        confidence: 80,
+        layer: 'deterministic',
+      },
+      shouldBlock: false,
+      messageCount,
+    };
+  }
+
+  return { anomaly: null, shouldBlock: false, messageCount };
+}
+
+/**
+ * Reset user's message rate (for testing/admin purposes)
+ */
+export function resetUserMessageRate(userId: string): void {
+  userMessageRates.delete(userId);
+}
+
 // ============== Policy Violation Detection (Layer 1) ==============
 
 const POLICY_VIOLATION_PATTERNS = {

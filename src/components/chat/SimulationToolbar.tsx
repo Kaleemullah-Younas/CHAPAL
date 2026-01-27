@@ -42,12 +42,29 @@ const simulationOptions = [
     color:
       'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100',
   },
+  {
+    id: 'ddos',
+    label: 'DDoS Attack',
+    icon: '⚡',
+    prompt: '[SIMULATE_DDOS]',
+    color: 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100',
+    isSpecial: true,
+  },
 ];
 
 export function SimulationToolbar({
   onSimulate,
   disabled,
 }: SimulationToolbarProps) {
+  const handleDdosSimulation = async () => {
+    // Send 4 rapid messages to trigger DDoS detection
+    const ddosMessage = 'Testing rapid message sending for DDoS detection...';
+    for (let i = 0; i < 4; i++) {
+      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay between messages
+      onSimulate(`${ddosMessage} (${i + 1}/4)`);
+    }
+  };
+
   return (
     <div className="bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-border px-4 py-3">
       <div className="flex items-center gap-3 flex-wrap">
@@ -60,15 +77,27 @@ export function SimulationToolbar({
         <div className="h-6 w-px bg-border hidden sm:block"></div>
         <div className="flex flex-wrap gap-2">
           {simulationOptions.map(option => (
-            <button
-              key={option.id}
-              onClick={() => onSimulate(option.prompt)}
-              disabled={disabled}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${option.color}`}
-            >
-              <span>{option.icon}</span>
-              <span>{option.label}</span>
-            </button>
+            <div key={option.id} className="relative group">
+              <button
+                onClick={() => {
+                  if (option.id === 'ddos') {
+                    handleDdosSimulation();
+                  } else {
+                    onSimulate(option.prompt);
+                  }
+                }}
+                disabled={disabled}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${option.color}`}
+              >
+                <span>{option.icon}</span>
+                <span>{option.label}</span>
+              </button>
+              {option.id === 'ddos' && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                  Sends 4 rapid messages to trigger spike detection
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </div>
