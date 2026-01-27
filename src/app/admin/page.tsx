@@ -55,6 +55,27 @@ interface SemanticReviewAnomaly {
   } | null;
 }
 
+// Type definition for pending human reviews (blocked chats)
+interface PendingHumanReview {
+  id: string;
+  title: string | null;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  humanReviewReason: string | null;
+  humanReviewMessage: string | null;
+  humanReviewMessageId: string | null;
+  updatedAt: string;
+  messages: {
+    id: string;
+    role: string;
+    content: string;
+    originalContent: string | null;
+    isPendingReview: boolean;
+    createdAt: string;
+  }[];
+}
+
 // Helper to get llama report from detection details
 function getLlamaReport(anomaly: Anomaly) {
   const details = anomaly.detectionDetails as {
@@ -306,13 +327,14 @@ function ReviewModal({
                       Approve (False Positive)
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      This message was actually safe. Unblock and show to user.
+                      This message was actually safe. Unblock chat and show AI
+                      response to user.
                     </p>
                   </div>
                 </div>
               </button>
 
-              {/* Option B: Confirm Block */}
+              {/* Option B: Block User */}
               <button
                 onClick={() => setActiveAction('block')}
                 className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
@@ -340,9 +362,12 @@ function ReviewModal({
                     </svg>
                   </div>
                   <div>
-                    <p className="font-medium text-foreground">Confirm Block</p>
+                    <p className="font-medium text-foreground">
+                      Block User Account
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      Violation confirmed. Keep blocked permanently.
+                      Severe violation. Block user from the entire app
+                      permanently.
                     </p>
                   </div>
                 </div>
@@ -425,6 +450,365 @@ function ReviewModal({
                 Submit Decision
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Human Review Action Modal - For blocked chats
+function HumanReviewActionModal({
+  isOpen,
+  onClose,
+  chat,
+  originalAIResponse,
+  onApprove,
+  onBlock,
+  onRespond,
+  isLoading,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  chat: PendingHumanReview | null;
+  originalAIResponse: string;
+  onApprove: () => void;
+  onBlock: () => void;
+  onRespond: (response: string) => void;
+  isLoading?: boolean;
+}) {
+  const [adminResponse, setAdminResponse] = useState('');
+  const [activeAction, setActiveAction] = useState<
+    'approve' | 'block' | 'respond' | null
+  >(null);
+
+  if (!isOpen || !chat) return null;
+
+  // Get reason badge info
+  const reasonBadges: Record<
+    string,
+    { color: string; icon: string; label: string }
+  > = {
+    hallucination: {
+      color: 'bg-purple-100 text-purple-700',
+      icon: '🎭',
+      label: 'Hallucination Risk',
+    },
+    medical: {
+      color: 'bg-rose-100 text-rose-700',
+      icon: '⚕️',
+      label: 'Medical Advice',
+    },
+    self_harm: {
+      color: 'bg-red-100 text-red-700',
+      icon: '💙',
+      label: 'Self-Harm Concern',
+    },
+    psychological: {
+      color: 'bg-violet-100 text-violet-700',
+      icon: '🧠',
+      label: 'Psychological',
+    },
+    unknown: {
+      color: 'bg-gray-100 text-gray-700',
+      icon: '❓',
+      label: 'Review Required',
+    },
+  };
+  const reason = chat.humanReviewReason || 'unknown';
+  const badge = reasonBadges[reason] || reasonBadges.unknown;
+
+  // Get the last user message
+  const userMessage = [...chat.messages].reverse().find(m => m.role === 'user');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      <div className="relative z-10 w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 bg-gradient-to-r from-indigo-50 to-transparent border-b border-border flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-indigo-600"
+                >
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Human Review Required
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  User&apos;s chat is blocked until you take action
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-muted rounded-lg transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* User Info and Reason */}
+          <div className="mb-6 p-4 bg-slate-50 rounded-xl">
+            <div className="flex items-center gap-4 mb-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {chat.userName || 'Unknown User'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {chat.userEmail}
+                </p>
+              </div>
+              <span
+                className={`px-3 py-1 text-sm font-medium rounded-full ${badge.color}`}
+              >
+                {badge.icon} {badge.label}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Chat:{' '}
+              <span className="font-medium text-foreground">
+                {chat.title || 'Untitled Chat'}
+              </span>
+            </p>
+          </div>
+
+          {/* User's Query */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-foreground mb-2">
+              User&apos;s Query
+            </h3>
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+              <p className="text-sm text-foreground whitespace-pre-wrap">
+                {userMessage?.content || 'No query available'}
+              </p>
+            </div>
+          </div>
+
+          {/* AI Response (Hidden from User) */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+              AI Response
+              <span className="text-xs font-normal px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                Hidden from user
+              </span>
+            </h3>
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-sm text-foreground whitespace-pre-wrap">
+                {originalAIResponse || 'No AI response available'}
+              </p>
+            </div>
+          </div>
+
+          {/* Action Options */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              Choose Your Action
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              ⚠️ Note: Admin can only respond once. This action cannot be
+              changed after submission.
+            </p>
+
+            {/* Option A: Approve AI Response */}
+            <button
+              onClick={() => setActiveAction('approve')}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
+                activeAction === 'approve'
+                  ? 'border-emerald-500 bg-emerald-50'
+                  : 'border-border hover:border-emerald-300 hover:bg-emerald-50/50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-emerald-600"
+                  >
+                    <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                    <path d="m9 12 2 2 4-4" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">
+                    Approve AI Response
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    The AI response is safe. Show it to the user with
+                    &quot;Approved by Admin&quot; label.
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {/* Option B: Block User Account */}
+            <button
+              onClick={() => setActiveAction('block')}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
+                activeAction === 'block'
+                  ? 'border-rose-500 bg-rose-50'
+                  : 'border-border hover:border-rose-300 hover:bg-rose-50/50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-rose-600"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="m4.9 4.9 14.2 14.2" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">
+                    Block User Account
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Severe violation. Block user from the entire app
+                    permanently.
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {/* Option C: Write Custom Response */}
+            <button
+              onClick={() => setActiveAction('respond')}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
+                activeAction === 'respond'
+                  ? 'border-indigo-500 bg-indigo-50'
+                  : 'border-border hover:border-indigo-300 hover:bg-indigo-50/50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-indigo-600"
+                  >
+                    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">
+                    Write Custom Response
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Provide your own response to the user with &quot;Admin
+                    Response&quot; label.
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            {/* Custom Response Text Area */}
+            {activeAction === 'respond' && (
+              <div className="mt-4">
+                <label className="text-sm font-medium text-foreground mb-2 block">
+                  Your Response to the User
+                </label>
+                <textarea
+                  value={adminResponse}
+                  onChange={e => setAdminResponse(e.target.value)}
+                  placeholder="Write your response here. Be helpful, accurate, and supportive..."
+                  className="w-full h-40 p-3 rounded-xl border border-border bg-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer - Fixed */}
+        <div className="px-6 py-4 border-t border-border bg-slate-50 flex-shrink-0">
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className="flex-1 h-11 rounded-xl border border-border font-medium text-muted-foreground hover:bg-white transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (activeAction === 'approve') onApprove();
+                else if (activeAction === 'block') onBlock();
+                else if (activeAction === 'respond' && adminResponse.trim())
+                  onRespond(adminResponse.trim());
+              }}
+              disabled={
+                !activeAction ||
+                (activeAction === 'respond' && !adminResponse.trim()) ||
+                isLoading
+              }
+              className="flex-1 h-11 rounded-xl bg-indigo-500 text-white font-medium hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {isLoading ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                'Submit Decision'
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -586,6 +970,28 @@ export default function AdminDashboard() {
     | undefined;
   const semanticLoading = semanticReviewsQuery.isLoading;
 
+  // Fetch pending human reviews (blocked chats awaiting admin action)
+  const [humanReviewPage, setHumanReviewPage] = useState(1);
+  const pendingHumanReviewsQuery = trpc.admin.getPendingHumanReviews.useQuery({
+    page: humanReviewPage,
+    limit: 20,
+  });
+  const pendingHumanReviewsData = pendingHumanReviewsQuery.data as
+    | {
+        chats: PendingHumanReview[];
+        total: number;
+        pages: number;
+        currentPage: number;
+      }
+    | undefined;
+  const humanReviewsLoading = pendingHumanReviewsQuery.isLoading;
+
+  // State for human review modal
+  const [humanReviewModalOpen, setHumanReviewModalOpen] = useState(false);
+  const [selectedChatForReview, setSelectedChatForReview] =
+    useState<PendingHumanReview | null>(null);
+  const [originalAIResponse, setOriginalAIResponse] = useState<string>('');
+
   // Fetch users
   const {
     data: usersData,
@@ -624,6 +1030,67 @@ export default function AdminDashboard() {
       setSelectedAnomaly(null);
     },
   });
+
+  // Human review action mutation (for blocked chats)
+  const humanReviewActionMutation = trpc.admin.humanReviewAction.useMutation({
+    onSuccess: () => {
+      utils.admin.getPendingHumanReviews.invalidate();
+      utils.admin.getAnomalyStats.invalidate();
+      utils.admin.getStats.invalidate();
+      setHumanReviewModalOpen(false);
+      setSelectedChatForReview(null);
+      setOriginalAIResponse('');
+    },
+  });
+
+  // Handler to open human review modal and fetch original AI response
+  const handleOpenHumanReviewModal = async (chat: PendingHumanReview) => {
+    setSelectedChatForReview(chat);
+    setHumanReviewModalOpen(true);
+
+    // Find the pending review message to get original content
+    const pendingMessage = chat.messages.find(m => m.isPendingReview);
+    if (pendingMessage?.originalContent) {
+      setOriginalAIResponse(pendingMessage.originalContent);
+    } else {
+      // If originalContent is not in the message, look for it from the AI response
+      const aiMessage = chat.messages.find(m => m.role === 'assistant');
+      setOriginalAIResponse(
+        aiMessage?.originalContent ||
+          aiMessage?.content ||
+          'No AI response available',
+      );
+    }
+  };
+
+  // Human review action handlers
+  const handleHumanReviewApprove = async () => {
+    if (selectedChatForReview) {
+      await humanReviewActionMutation.mutateAsync({
+        chatId: selectedChatForReview.id,
+        action: 'approve',
+      });
+    }
+  };
+
+  const handleHumanReviewBlock = async () => {
+    if (selectedChatForReview) {
+      await humanReviewActionMutation.mutateAsync({
+        chatId: selectedChatForReview.id,
+        action: 'block',
+      });
+    }
+  };
+
+  const handleHumanReviewRespond = async (response: string) => {
+    if (selectedChatForReview) {
+      await humanReviewActionMutation.mutateAsync({
+        chatId: selectedChatForReview.id,
+        action: 'admin_response',
+        adminResponse: response,
+      });
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -709,6 +1176,22 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Human Review Action Modal */}
+      <HumanReviewActionModal
+        isOpen={humanReviewModalOpen}
+        onClose={() => {
+          setHumanReviewModalOpen(false);
+          setSelectedChatForReview(null);
+          setOriginalAIResponse('');
+        }}
+        chat={selectedChatForReview}
+        originalAIResponse={originalAIResponse}
+        onApprove={handleHumanReviewApprove}
+        onBlock={handleHumanReviewBlock}
+        onRespond={handleHumanReviewRespond}
+        isLoading={humanReviewActionMutation.isPending}
+      />
+
       {/* User Management Modal */}
       <ConfirmModal
         isOpen={modalState.isOpen}
@@ -1345,6 +1828,10 @@ export default function AdminDashboard() {
 
                             {/* Flags */}
                             <div className="flex flex-wrap gap-2 mb-3">
+                              {/* CHAT BLOCKING INDICATOR - Always show for Layer 2 */}
+                              <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700 animate-pulse">
+                                🚫 Chat Blocked - User Waiting
+                              </span>
                               {semantic?.isHallucination && (
                                 <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
                                   🎭 Hallucination Risk

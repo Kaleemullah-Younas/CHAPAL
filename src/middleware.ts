@@ -9,6 +9,7 @@ type UserWithRole = {
   emailVerified: boolean;
   image?: string | null;
   role: 'user' | 'admin';
+  isBlocked?: boolean;
 };
 
 export default async function authMiddleware(request: NextRequest) {
@@ -35,6 +36,15 @@ export default async function authMiddleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/admin') && !isAdminAuthPage;
   const isHomePage = request.nextUrl.pathname === '/';
   const isPublicPage = isHomePage; // Landing page
+  const isBlockedPage = request.nextUrl.pathname === '/blocked';
+
+  // Check if user is blocked - redirect to blocked page
+  if (sessionData && sessionData.user.isBlocked && !isBlockedPage) {
+    // Allow API routes for signout
+    if (!request.nextUrl.pathname.startsWith('/api')) {
+      return NextResponse.redirect(new URL('/blocked', request.url));
+    }
+  }
 
   // Redirect admin users from home to admin dashboard
   if (

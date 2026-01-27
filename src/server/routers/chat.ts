@@ -67,6 +67,16 @@ export const chatRouter = router({
           userId: true,
           createdAt: true,
           updatedAt: true,
+          // Human Review blocking fields
+          isHumanReviewBlocked: true,
+          humanReviewReason: true,
+          humanReviewMessageId: true,
+          humanReviewStatus: true,
+          humanReviewMessage: true,
+          humanReviewAdminId: true,
+          humanReviewResponse: true,
+          humanReviewedAt: true,
+          humanReviewLocked: true,
           messages: {
             select: {
               id: true,
@@ -75,6 +85,9 @@ export const chatRouter = router({
               attachments: true,
               chatId: true,
               createdAt: true,
+              isPendingReview: true,
+              isAdminCorrected: true,
+              correctedAt: true,
             },
             orderBy: { createdAt: 'asc' },
           },
@@ -95,6 +108,16 @@ export const chatRouter = router({
         userId: chat.userId,
         createdAt: chat.createdAt,
         updatedAt: chat.updatedAt,
+        // Human Review blocking
+        isHumanReviewBlocked: chat.isHumanReviewBlocked,
+        humanReviewReason: chat.humanReviewReason,
+        humanReviewMessageId: chat.humanReviewMessageId,
+        humanReviewStatus: chat.humanReviewStatus,
+        humanReviewMessage: chat.humanReviewMessage,
+        humanReviewAdminId: chat.humanReviewAdminId,
+        humanReviewResponse: chat.humanReviewResponse,
+        humanReviewedAt: chat.humanReviewedAt,
+        humanReviewLocked: chat.humanReviewLocked,
         messages: chat.messages.map(m => ({
           id: m.id,
           role: m.role,
@@ -104,6 +127,9 @@ export const chatRouter = router({
             | null,
           chatId: m.chatId,
           createdAt: m.createdAt,
+          isPendingReview: m.isPendingReview,
+          isAdminCorrected: m.isAdminCorrected,
+          correctedAt: m.correctedAt,
         })),
       };
     }),

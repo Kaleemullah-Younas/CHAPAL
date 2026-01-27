@@ -48,6 +48,11 @@ interface Message {
   blockMessage?: string;
   warningType?: string;
   pendingMessage?: string;
+  // Human Review states
+  humanReviewStatus?: 'approved' | 'blocked' | 'admin_response' | null;
+  humanReviewResponse?: string | null;
+  isAdminCorrected?: boolean;
+  correctedAt?: Date | string;
 }
 
 interface AnomalyLog {
@@ -263,13 +268,34 @@ export default function ChatDetailPage() {
   // Update messages when chat data loads
   useEffect(() => {
     if (chat?.messages) {
-      setMessages(
-        chat.messages.map(m => {
+      setMessages(prev => {
+        // Preserve any blocked assistant messages that were added locally (not in DB)
+        const localBlockedMessages = prev.filter(
+          m =>
+            m.isBlocked &&
+            m.role === 'assistant' &&
+            m.id.startsWith('blocked-'),
+        );
+
+        const dbMessages = chat.messages.map(m => {
           // Safely cast attachments from Prisma Json type
           const atts = m.attachments as unknown;
           const typedAttachments = Array.isArray(atts)
             ? (atts as MessageAttachment[])
             : null;
+
+          // Determine human review status based on chat state
+          let humanReviewStatus:
+            | 'approved'
+            | 'blocked'
+            | 'admin_response'
+            | null = null;
+          if (chat.humanReviewStatus && chat.humanReviewMessageId === m.id) {
+            humanReviewStatus = chat.humanReviewStatus as
+              | 'approved'
+              | 'blocked'
+              | 'admin_response';
+          }
 
           return {
             id: m.id,
@@ -277,9 +303,16 @@ export default function ChatDetailPage() {
             content: m.content,
             attachments: typedAttachments,
             createdAt: new Date(m.createdAt),
+            isPendingReview: m.isPendingReview,
+            isAdminCorrected: m.isAdminCorrected,
+            correctedAt: m.correctedAt ?? undefined,
+            humanReviewStatus,
           };
-        }),
-      );
+        });
+
+        // Append local blocked messages to DB messages
+        return [...dbMessages, ...localBlockedMessages];
+      });
     }
   }, [chat]);
 
@@ -423,9 +456,13 @@ export default function ChatDetailPage() {
           setIsStreaming(false);
           setThinkingStage(null);
 
-          // Refresh chat data
+          // If chat is blocked (safety issue), invalidate chat data to get updated isHumanReviewBlocked status
+          if (data.chatBlocked) {
+            utils.chat.getChatById.invalidate({ chatId });
+          }
+
+          // Refresh sidebar chat list
           utils.chat.getChats.invalidate();
-          utils.chat.getChatById.invalidate({ chatId });
           return;
         }
       }
@@ -780,6 +817,8 @@ export default function ChatDetailPage() {
           onSend={handleSend}
           isLoading={isStreaming || isUploading}
           disabled={isStreaming || isUploading}
+          isHumanReviewBlocked={chat?.isHumanReviewBlocked}
+          humanReviewMessage={chat?.humanReviewMessage || undefined}
         />
       </div>
 

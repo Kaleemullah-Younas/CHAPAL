@@ -284,6 +284,7 @@ const SAFETY_PATTERNS = {
       /\b(?:cut|cutting|harm)\s+(?:myself|my\s*self)\b/gi,
       /\bhopeless\b.*\b(?:end|die|suicide)\b/gi,
       /\bI\s+(?:don't|do\s+not)\s+want\s+to\s+(?:live|exist|be\s+alive)\b/gi,
+      /\bself[-\s]?harm(?:ing)?\b/gi, // Catches "self harm", "self-harm", "selfharm", "self harming"
     ],
     severity: 'critical' as AnomalySeverity,
     message: 'Self-harm or suicidal content detected',

@@ -80,6 +80,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
     }
 
+    // Check if chat is blocked (pending admin review)
+    if (chat.isHumanReviewBlocked) {
+      return NextResponse.json({
+        blocked: true,
+        chatBlocked: true,
+        layer: 'deterministic',
+        detection: {
+          layer: 'deterministic',
+          isBlocked: true,
+          isWarning: false,
+          isPendingReview: true,
+          isSafe: false,
+          safetyScore: 0,
+          accuracyScore: 100,
+          userEmotion: 'Neutral',
+          emotionIntensity: 'low',
+          anomalies: [],
+          blockMessage:
+            chat.humanReviewMessage ||
+            'This chat has been blocked and is pending admin review. Please start a new chat.',
+        },
+        messageId: null,
+      });
+    }
+
     // Build parts for the current message
     const currentParts: Part[] = [];
 
@@ -174,7 +199,30 @@ export async function POST(req: NextRequest) {
       // Get primary anomaly for logging
       const primaryAnomaly = layer1Result.anomalies[0];
 
-      // Create anomaly log for admin (informational, no human review needed for Layer 1)
+      // Determine if this is a critical safety issue that should block the entire chat
+      // Safety issues (self-harm, violence, illegal activity) should block the chat
+      const isSafetyIssue = layer1Result.anomalies.some(
+        a => a.type === 'safety' && a.severity === 'critical',
+      );
+      const safetySubType = layer1Result.anomalies.find(
+        a => a.type === 'safety',
+      )?.subType;
+
+      // Block the chat if it's a safety issue
+      if (isSafetyIssue) {
+        await prisma.chat.update({
+          where: { id: chatId },
+          data: {
+            isHumanReviewBlocked: true,
+            humanReviewReason: safetySubType || 'safety',
+            humanReviewMessageId: userMessage.id,
+            humanReviewStatus: 'pending',
+            humanReviewMessage: `This chat has been blocked due to ${primaryAnomaly?.message?.toLowerCase() || 'safety concerns'}. An admin will review this conversation. Please start a new chat.`,
+          },
+        });
+      }
+
+      // Create anomaly log for admin review
       await prisma.anomalyLog.create({
         data: {
           messageId: userMessage.id,
@@ -189,19 +237,20 @@ export async function POST(req: NextRequest) {
           detectionDetails: layer1Result as object,
           safetyScore: layer1Result.safetyScore,
           userEmotion: layer1Result.userEmotion,
-          status: 'blocked', // Auto-blocked, no review needed
+          status: isSafetyIssue ? 'pending' : 'blocked', // Pending review for safety issues
         },
       });
 
       // Return blocked response
       return NextResponse.json({
         blocked: true,
+        chatBlocked: isSafetyIssue, // Flag to indicate chat is blocked
         layer: 'deterministic',
         detection: {
           layer: 'deterministic',
           isBlocked: true,
           isWarning: false,
-          isPendingReview: false,
+          isPendingReview: isSafetyIssue,
           isSafe: false,
           safetyScore: layer1Result.safetyScore,
           accuracyScore: 100,
@@ -213,9 +262,10 @@ export async function POST(req: NextRequest) {
             severity: a.severity,
             message: a.message,
           })),
-          blockMessage:
-            layer1Result.userMessage ||
-            `Message Blocked. ${primaryAnomaly?.message || 'Security protocols triggered'}. This incident has been logged.`,
+          blockMessage: isSafetyIssue
+            ? `🚫 Message Blocked: ${primaryAnomaly?.message || 'Safety protocols triggered'}. This chat has been blocked and sent for admin review. Please start a new chat.`
+            : layer1Result.userMessage ||
+              `Message Blocked. ${primaryAnomaly?.message || 'Security protocols triggered'}. This incident has been logged.`,
         },
         messageId: userMessage.id,
       });
@@ -379,21 +429,40 @@ export async function POST(req: NextRequest) {
               },
             });
 
-            // If Layer 2 requires human review, create anomaly log
+            // If Layer 2 requires human review, create anomaly log and BLOCK the chat
             if (isPendingReview && semanticResult) {
+              // Determine the review reason for user-facing message
+              const reviewReason = semanticResult.isMedicalAdvice
+                ? 'medical'
+                : semanticResult.emotionalConcern
+                  ? 'self_harm'
+                  : semanticResult.isHallucination
+                    ? 'hallucination'
+                    : semanticResult.isPsychological
+                      ? 'psychological'
+                      : 'unknown';
+
+              // Generate user-facing message
+              const reviewMessages: Record<string, string> = {
+                hallucination:
+                  '🔍 AI response is being reviewed for accuracy. Our team will verify the information and respond shortly.',
+                medical:
+                  '⚕️ This query involves medical advice that requires human expert review. A qualified reviewer will respond shortly.',
+                self_harm:
+                  '💙 We care about your wellbeing. A trained specialist is reviewing this conversation to provide you with the best support.',
+                psychological:
+                  '🧠 This query involves sensitive psychological content. A qualified reviewer will respond shortly.',
+                unknown:
+                  '🔒 This response requires human verification. Our team will review and respond shortly.',
+              };
+
               await prisma.anomalyLog.create({
                 data: {
                   messageId: assistantMessage.id, // Link to assistant message
                   userId: session.user.id,
                   userEmail: session.user.email,
                   chatId,
-                  anomalyType: semanticResult.isMedicalAdvice
-                    ? 'medical'
-                    : semanticResult.isHallucination
-                      ? 'hallucination'
-                      : semanticResult.isPsychological
-                        ? 'context'
-                        : 'unknown',
+                  anomalyType: reviewReason,
                   severity: semanticResult.riskLevel,
                   layer: 'semantic',
                   userQuery: message,
@@ -413,6 +482,19 @@ export async function POST(req: NextRequest) {
               await prisma.message.update({
                 where: { id: userMessage.id },
                 data: { isPendingReview: true },
+              });
+
+              // BLOCK the chat for human review
+              await prisma.chat.update({
+                where: { id: chatId },
+                data: {
+                  isHumanReviewBlocked: true,
+                  humanReviewReason: reviewReason,
+                  humanReviewMessageId: assistantMessage.id,
+                  humanReviewStatus: 'pending',
+                  humanReviewMessage: reviewMessages[reviewReason],
+                  humanReviewLocked: false,
+                },
               });
             }
             // If Layer 1 has warnings, log for informational purposes
@@ -448,16 +530,55 @@ export async function POST(req: NextRequest) {
 
             sendThinkingStage('complete', 'Analysis complete');
 
+            // Determine the review reason message if chat is blocked
+            let humanReviewMessage: string | null = null;
+            if (isPendingReview && semanticResult) {
+              const reviewReason = semanticResult.isMedicalAdvice
+                ? 'medical'
+                : semanticResult.emotionalConcern
+                  ? 'self_harm'
+                  : semanticResult.isHallucination
+                    ? 'hallucination'
+                    : semanticResult.isPsychological
+                      ? 'psychological'
+                      : 'unknown';
+
+              const reviewMessages: Record<string, string> = {
+                hallucination:
+                  '🔍 AI response is being reviewed for accuracy. Our team will verify the information and respond shortly.',
+                medical:
+                  '⚕️ This query involves medical advice that requires human expert review. A qualified reviewer will respond shortly.',
+                self_harm:
+                  '💙 We care about your wellbeing. A trained specialist is reviewing this conversation to provide you with the best support.',
+                psychological:
+                  '🧠 This query involves sensitive psychological content. A qualified reviewer will respond shortly.',
+                unknown:
+                  '🔒 This response requires human verification. Our team will review and respond shortly.',
+              };
+              humanReviewMessage = reviewMessages[reviewReason];
+            }
+
             // Send final response with all analysis
             controller.enqueue(
               encoder.encode(
                 `data: ${JSON.stringify({
                   done: true,
                   isPendingReview,
+                  isChatBlocked: isPendingReview, // Chat is blocked for human review
                   accuracyScore: finalAccuracyScore,
-                  pendingMessage: isPendingReview
-                    ? 'This response requires human verification. Our team of experts will review it and notify you once approved. This ensures the highest quality and accuracy of information, especially for sensitive topics.'
-                    : null,
+                  pendingMessage: isPendingReview ? humanReviewMessage : null,
+                  humanReviewReason:
+                    isPendingReview && semanticResult
+                      ? semanticResult.isMedicalAdvice
+                        ? 'medical'
+                        : semanticResult.emotionalConcern
+                          ? 'self_harm'
+                          : semanticResult.isHallucination
+                            ? 'hallucination'
+                            : semanticResult.isPsychological
+                              ? 'psychological'
+                              : 'unknown'
+                      : null,
                 })}\n\n`,
               ),
             );
