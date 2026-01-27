@@ -943,23 +943,38 @@ export default function AdminDashboard() {
   const { data: stats, isLoading: statsLoading } =
     trpc.admin.getStats.useQuery();
 
-  // Fetch anomaly stats
-  const { data: anomalyStats } = trpc.admin.getAnomalyStats.useQuery();
+  // Fetch anomaly stats (polling every 5 seconds)
+  const { data: anomalyStats } = trpc.admin.getAnomalyStats.useQuery(
+    undefined,
+    {
+      refetchInterval: 5000,
+    },
+  );
 
-  // Fetch anomalies from database
+  // Fetch anomalies from database (polling every 5 seconds)
   const { data: anomaliesData, isLoading: anomaliesLoading } =
-    trpc.admin.getAnomalies.useQuery({
-      page: anomalyPage,
-      limit: 20,
-      status: statusFilter,
-    });
+    trpc.admin.getAnomalies.useQuery(
+      {
+        page: anomalyPage,
+        limit: 20,
+        status: statusFilter,
+      },
+      {
+        refetchInterval: 5000,
+      },
+    );
 
-  // Fetch Layer 2 semantic reviews (human-in-the-loop pending)
+  // Fetch Layer 2 semantic reviews (human-in-the-loop pending, polling every 5 seconds)
   const [semanticPage, setSemanticPage] = useState(1);
-  const semanticReviewsQuery = trpc.admin.getPendingSemanticReviews.useQuery({
-    page: semanticPage,
-    limit: 20,
-  });
+  const semanticReviewsQuery = trpc.admin.getPendingSemanticReviews.useQuery(
+    {
+      page: semanticPage,
+      limit: 20,
+    },
+    {
+      refetchInterval: 5000,
+    },
+  );
   const semanticReviewsData = semanticReviewsQuery.data as
     | {
         anomalies: SemanticReviewAnomaly[];
@@ -970,12 +985,17 @@ export default function AdminDashboard() {
     | undefined;
   const semanticLoading = semanticReviewsQuery.isLoading;
 
-  // Fetch pending human reviews (blocked chats awaiting admin action)
+  // Fetch pending human reviews (blocked chats awaiting admin action, polling every 5 seconds)
   const [humanReviewPage, setHumanReviewPage] = useState(1);
-  const pendingHumanReviewsQuery = trpc.admin.getPendingHumanReviews.useQuery({
-    page: humanReviewPage,
-    limit: 20,
-  });
+  const pendingHumanReviewsQuery = trpc.admin.getPendingHumanReviews.useQuery(
+    {
+      page: humanReviewPage,
+      limit: 20,
+    },
+    {
+      refetchInterval: 5000,
+    },
+  );
   const pendingHumanReviewsData = pendingHumanReviewsQuery.data as
     | {
         chats: PendingHumanReview[];

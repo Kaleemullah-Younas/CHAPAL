@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { router, protectedProcedure } from '../trpc';
 import { TRPCError } from '@trpc/server';
 import { prisma } from '@/lib/db';
+import { pusher, getChatChannelName, PUSHER_EVENTS } from '@/lib/pusher-server';
 
 // Type for user with role
 type UserWithRole = {
@@ -556,6 +557,30 @@ export const adminRouter = router({
             },
           });
         }
+
+        // Trigger Pusher event to notify user's chat in real-time
+        const anomalyChannelName = getChatChannelName(anomaly.chatId);
+        console.log(
+          `[Pusher] Triggering event on channel: ${anomalyChannelName}, event: ${PUSHER_EVENTS.ADMIN_RESPONSE}`,
+        );
+
+        try {
+          await pusher.trigger(
+            anomalyChannelName,
+            PUSHER_EVENTS.ADMIN_RESPONSE,
+            {
+              chatId: anomaly.chatId,
+              action: 'correct',
+              responseLabel: '👤 Admin Response',
+              adminResponse,
+              messageId: anomaly.messageId,
+              timestamp: new Date().toISOString(),
+            },
+          );
+          console.log('[Pusher] Event triggered successfully');
+        } catch (pusherError) {
+          console.error('[Pusher] Failed to trigger event:', pusherError);
+        }
       }
 
       return {
@@ -780,6 +805,27 @@ export const adminRouter = router({
             adminResponseMessageId || chat.humanReviewMessageId,
         },
       });
+
+      // Trigger Pusher event to notify user's chat in real-time
+      const channelName = getChatChannelName(chatId);
+      console.log(
+        `[Pusher] Triggering event on channel: ${channelName}, event: ${PUSHER_EVENTS.ADMIN_RESPONSE}`,
+      );
+
+      try {
+        await pusher.trigger(channelName, PUSHER_EVENTS.ADMIN_RESPONSE, {
+          chatId,
+          action,
+          responseLabel,
+          adminResponse:
+            action === 'admin_response' ? adminResponse : undefined,
+          messageId: adminResponseMessageId || chat.humanReviewMessageId,
+          timestamp: new Date().toISOString(),
+        });
+        console.log('[Pusher] Event triggered successfully');
+      } catch (pusherError) {
+        console.error('[Pusher] Failed to trigger event:', pusherError);
+      }
 
       return {
         success: true,

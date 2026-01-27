@@ -12,7 +12,13 @@ import {
   PendingReviewMessage,
 } from '@/components/chat';
 import type { ThinkingStage } from '@/components/chat';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  getPusherClient,
+  getChatChannelName,
+  PUSHER_EVENTS,
+  type AdminResponseEvent,
+} from '@/lib/pusher-client';
 
 interface Attachment {
   file: File;
@@ -269,13 +275,16 @@ export default function ChatDetailPage() {
   useEffect(() => {
     if (chat?.messages) {
       setMessages(prev => {
-        // Preserve any blocked assistant messages that were added locally (not in DB)
-        const localBlockedMessages = prev.filter(
-          m =>
-            m.isBlocked &&
-            m.role === 'assistant' &&
-            m.id.startsWith('blocked-'),
-        );
+        // Only preserve local blocked messages if chat is still blocked
+        // If admin has responded (isHumanReviewBlocked is false), remove local blocked messages
+        const localBlockedMessages = chat.isHumanReviewBlocked
+          ? prev.filter(
+              m =>
+                m.isBlocked &&
+                m.role === 'assistant' &&
+                m.id.startsWith('blocked-'),
+            )
+          : []; // Don't keep blocked messages if chat is unblocked
 
         const dbMessages = chat.messages.map(m => {
           // Safely cast attachments from Prisma Json type
@@ -320,6 +329,48 @@ export default function ChatDetailPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
+
+  // Subscribe to Pusher for real-time admin response updates
+  useEffect(() => {
+    if (!chatId) return;
+
+    const pusher = getPusherClient();
+    const channelName = getChatChannelName(chatId);
+
+    console.log(`[Pusher Client] Subscribing to channel: ${channelName}`);
+
+    const channel = pusher.subscribe(channelName);
+
+    // Log connection state
+    channel.bind('pusher:subscription_succeeded', () => {
+      console.log(`[Pusher Client] Successfully subscribed to ${channelName}`);
+    });
+
+    channel.bind('pusher:subscription_error', (error: unknown) => {
+      console.error(
+        `[Pusher Client] Subscription error for ${channelName}:`,
+        error,
+      );
+    });
+
+    // Handle admin response event - refetch chat data
+    const handleAdminResponse = (data: AdminResponseEvent) => {
+      console.log('[Pusher Client] Received admin response event:', data);
+      // Refetch the chat data to get the updated messages
+      utils.chat.getChatById.invalidate({ chatId });
+    };
+
+    channel.bind(PUSHER_EVENTS.ADMIN_RESPONSE, handleAdminResponse);
+
+    // Cleanup on unmount
+    return () => {
+      console.log(`[Pusher Client] Unsubscribing from channel: ${channelName}`);
+      channel.unbind(PUSHER_EVENTS.ADMIN_RESPONSE, handleAdminResponse);
+      channel.unbind('pusher:subscription_succeeded');
+      channel.unbind('pusher:subscription_error');
+      pusher.unsubscribe(channelName);
+    };
+  }, [chatId, utils.chat.getChatById]);
 
   const uploadFile = async (
     file: File,
