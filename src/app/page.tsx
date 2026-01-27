@@ -47,14 +47,14 @@ function SectionHeader({
       {badge && (
         <motion.span
           variants={fadeInUp}
-          className="inline-block px-4 py-1.5 rounded-full text-sm font-medium bg-accent/20 text-primary border border-accent/30 mb-4"
+          className="inline-block text-sm font-semibold tracking-widest uppercase text-primary mb-4"
         >
           {badge}
         </motion.span>
       )}
       <motion.h2
         variants={fadeInUp}
-        className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4"
+        className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4 font-heading"
       >
         {title}
       </motion.h2>
@@ -107,28 +107,20 @@ function HeroSection() {
           variants={staggerContainer}
           className="text-center"
         >
-          {/* Badge */}
-          <motion.div
+          {/* Subtitle */}
+          <motion.p
             variants={fadeInUp}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/80 backdrop-blur-sm border border-accent/30 mb-8 shadow-lg shadow-accent/10"
+            className="text-sm font-semibold tracking-widest uppercase text-primary/80 mb-6"
           >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
-            </span>
-            <span className="text-sm font-medium text-primary">
-              AI Safety & Anomaly Detection Platform
-            </span>
-          </motion.div>
+            AI Safety & Anomaly Detection Platform
+          </motion.p>
 
           {/* Main heading */}
           <motion.h1
             variants={fadeInUp}
-            className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight text-foreground mb-6"
+            className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight text-foreground mb-6 font-heading"
           >
-            <span className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              Contextual Human-Assisted
-            </span>
+            <span className="text-primary">Contextual Human-Assisted</span>
             <br />
             <span className="text-foreground">
               Protection & Anomaly Learning
@@ -152,7 +144,7 @@ function HeroSection() {
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
               <Link
                 href="/signup"
-                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white bg-gradient-to-r from-primary to-accent rounded-2xl hover:shadow-xl hover:shadow-primary/30 transition-all duration-300"
+                className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white bg-primary rounded-2xl hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/20 transition-all duration-300"
               >
                 Get Started Free
                 <svg
@@ -197,7 +189,7 @@ function HeroSection() {
                 className="text-center"
                 whileHover={{ scale: 1.05 }}
               >
-                <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                <div className="text-2xl sm:text-3xl font-bold text-primary">
                   {stat.value}
                 </div>
                 <div className="text-sm text-muted-foreground">
@@ -219,9 +211,9 @@ function BentoGridSection() {
 
   const features = [
     {
-      title: 'Anomaly Detection',
+      title: 'Llama 3.1 Guardrails',
       description:
-        'Real-time scanning for hallucinations, policy violations, and unusual patterns.',
+        'Real-time AI auditing powered by Llama 3.1 via Groq. Detects prompt injections, PII leaks, harmful content, and hallucinations instantly.',
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -243,9 +235,9 @@ function BentoGridSection() {
       span: 'col-span-1 row-span-1',
     },
     {
-      title: 'Human-in-the-Loop',
+      title: 'Human-in-the-Loop Review',
       description:
-        'Expert specialists review flagged interactions for quality assurance.',
+        "Admins and specialists review flagged interactions in real-time. Approve, block, or provide corrected responses that update the user's chat instantly.",
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -268,8 +260,9 @@ function BentoGridSection() {
       span: 'col-span-1 row-span-2',
     },
     {
-      title: 'Full Analysis',
-      description: 'Comprehensive analysis dashboard for complete oversight.',
+      title: 'Admin Command Center',
+      description:
+        'Comprehensive triage dashboard with anomaly stats, pending reviews, severity tracking, and complete interaction logs.',
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -291,9 +284,9 @@ function BentoGridSection() {
       span: 'col-span-1 row-span-1',
     },
     {
-      title: 'AI Tutor',
+      title: 'Attack Simulation',
       description:
-        'Intelligent assistant that understands context and provides accurate responses.',
+        'Built-in toolbar to simulate prompt injections, self-harm queries, PII leaks, and hallucination triggers for testing and demos.',
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -306,17 +299,17 @@ function BentoGridSection() {
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
         </svg>
       ),
-      color: 'from-purple-400 to-purple-600',
-      bgColor: 'bg-purple-50',
+      color: 'from-amber-400 to-amber-600',
+      bgColor: 'bg-amber-50',
       span: 'col-span-1 row-span-1',
     },
     {
       title: 'Transparency Panel',
       description:
-        'View real-time safety scores and flagged anomalies in your chat history.',
+        'Real-time safety scores, emotion detection, accuracy metrics, and live flag logs visible to users during every interaction.',
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -343,9 +336,9 @@ function BentoGridSection() {
     <section id="features" className="py-24 bg-white">
       <div className="mx-auto max-w-7xl px-6">
         <SectionHeader
-          badge="Features"
-          title="Multi-Layer Protection System"
-          description="Our comprehensive approach ensures AI responses are safe, accurate, and appropriate before reaching users."
+          badge="CORE FEATURES"
+          title="Multi-Layer AI Safety System"
+          description="Powered by Gemini for responses and Llama 3.1 for real-time auditing. Every interaction is monitored, analyzed, and protected."
         />
 
         <motion.div
@@ -701,12 +694,6 @@ function CTASection() {
         variants={staggerContainer}
         className="relative mx-auto max-w-4xl px-6 text-center"
       >
-        <motion.span
-          variants={fadeInUp}
-          className="inline-block px-4 py-1.5 rounded-full text-sm font-medium bg-white/20 text-white border border-white/30 mb-6"
-        >
-          Ready When You Are
-        </motion.span>
         <motion.h2
           variants={fadeInUp}
           className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-6"
@@ -775,7 +762,9 @@ function FooterSection() {
                 height={32}
                 className="drop-shadow-sm"
               />
-              <span className="text-xl font-bold text-white">CHAPAL</span>
+              <span className="text-xl font-bold text-white font-heading">
+                CHAPAL
+              </span>
             </Link>
             <p className="text-white/60 max-w-sm leading-relaxed">
               Contextual Human-Assisted Protection and Anomaly Learning.
