@@ -55,6 +55,14 @@ interface SemanticReviewAnomaly {
   } | null;
 }
 
+// Type for review iteration history
+interface ReviewIteration {
+  response: string;
+  adminInstructions: string;
+  rating: number;
+  timestamp: string;
+}
+
 // Type definition for pending human reviews (blocked chats)
 interface PendingHumanReview {
   id: string;
@@ -943,6 +951,571 @@ function HumanReviewActionModal({
   );
 }
 
+// Star rating component - Used in SemanticReviewModal
+function StarRating({
+  rating,
+  onChange,
+  disabled,
+}: {
+  rating: number;
+  onChange: (rating: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map(star => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => !disabled && onChange(star)}
+          disabled={disabled}
+          className={`p-0.5 transition-all ${disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-110'}`}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill={star <= rating ? 'currentColor' : 'none'}
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={star <= rating ? 'text-amber-400' : 'text-gray-300'}
+          >
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        </button>
+      ))}
+      <span className="ml-2 text-sm text-muted-foreground">
+        {rating === 1 && 'Poor'}
+        {rating === 2 && 'Needs Improvement'}
+        {rating === 3 && 'Acceptable'}
+        {rating === 4 && 'Good'}
+        {rating === 5 && 'Excellent'}
+      </span>
+    </div>
+  );
+}
+
+// Human-in-the-Loop Semantic Review Modal (Layer 2)
+// This modal allows admins to review AI responses, rate them, regenerate with instructions, and approve
+function SemanticReviewModal({
+  isOpen,
+  onClose,
+  anomaly,
+  onApprove,
+  onBlock,
+  onRegenerate,
+  isLoading,
+  isRegenerating,
+  currentResponse,
+  iterations,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  anomaly: SemanticReviewAnomaly | null;
+  onApprove: (rating: number) => void;
+  onBlock: () => void;
+  onRegenerate: (instructions: string, rating: number) => void;
+  isLoading?: boolean;
+  isRegenerating?: boolean;
+  currentResponse: string;
+  iterations: ReviewIteration[];
+}) {
+  const [adminInstructions, setAdminInstructions] = useState('');
+  const [currentRating, setCurrentRating] = useState(3);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Reset state when modal opens
+  useState(() => {
+    if (isOpen) {
+      setAdminInstructions('');
+      setCurrentRating(3);
+      setShowHistory(false);
+    }
+  });
+
+  if (!isOpen || !anomaly) return null;
+
+  const displayResponse =
+    currentResponse || anomaly.aiResponse || 'No response generated';
+  const iterationCount = iterations.length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      <div className="relative z-10 w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[95vh] flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-b border-border flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-white"
+                >
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+                  <path d="m9 12 2 2 4-4" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-foreground">
+                  Human-in-the-Loop Review
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Review, rate, and refine AI response before sending to user
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {iterationCount > 0 && (
+                <span className="px-3 py-1.5 text-sm font-medium bg-indigo-100 text-indigo-700 rounded-full">
+                  Iteration #{iterationCount + 1}
+                </span>
+              )}
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-white/80 rounded-lg transition-colors"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid lg:grid-cols-2 divide-x divide-border">
+            {/* Left Column: Context */}
+            <div className="p-6 space-y-6 bg-slate-50/50">
+              {/* User Info */}
+              <div className="p-4 bg-white rounded-xl border border-border">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-medium">
+                    {anomaly.userEmail.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {anomaly.userEmail}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(anomaly.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                {/* Flags */}
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                    🚫 Chat Blocked
+                  </span>
+                  {anomaly.semanticAnalysis?.isMedicalAdvice && (
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-rose-100 text-rose-700">
+                      🏥 Medical Context
+                    </span>
+                  )}
+                  {anomaly.semanticAnalysis?.isHallucination && (
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                      🎭 Hallucination Risk
+                    </span>
+                  )}
+                  {anomaly.accuracyScore !== null && (
+                    <span
+                      className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        anomaly.accuracyScore >= 80
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : anomaly.accuracyScore >= 60
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-rose-100 text-rose-700'
+                      }`}
+                    >
+                      📊 Accuracy: {anomaly.accuracyScore}%
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* User Query */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-blue-500"
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                  User&apos;s Query
+                </h3>
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                    {anomaly.userQuery}
+                  </p>
+                </div>
+              </div>
+
+              {/* Iteration History */}
+              {iterations.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="w-full flex items-center justify-between p-3 bg-white border border-border rounded-xl hover:bg-slate-50 transition-colors"
+                  >
+                    <span className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-indigo-500"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      Previous Iterations ({iterations.length})
+                    </span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className={`transition-transform ${showHistory ? 'rotate-180' : ''}`}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+
+                  {showHistory && (
+                    <div className="mt-3 space-y-3 max-h-64 overflow-y-auto">
+                      {iterations.map((iter, idx) => (
+                        <div
+                          key={idx}
+                          className="p-3 bg-white border border-border rounded-lg"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-muted-foreground">
+                              Iteration #{idx + 1}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map(star => (
+                                <svg
+                                  key={star}
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill={
+                                    star <= iter.rating
+                                      ? 'currentColor'
+                                      : 'none'
+                                  }
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  className={
+                                    star <= iter.rating
+                                      ? 'text-amber-400'
+                                      : 'text-gray-300'
+                                  }
+                                >
+                                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                                </svg>
+                              ))}
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Response:
+                          </p>
+                          <p className="text-xs text-foreground line-clamp-2 mb-2">
+                            {iter.response}
+                          </p>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Admin Feedback:
+                          </p>
+                          <p className="text-xs text-indigo-600 italic">
+                            {iter.adminInstructions}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Current Response & Actions */}
+            <div className="p-6 space-y-6">
+              {/* Current AI Response */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-purple-500"
+                  >
+                    <path d="M12 8V4H8" />
+                    <rect width="16" height="12" x="4" y="8" rx="2" />
+                    <path d="M2 14h2" />
+                    <path d="M20 14h2" />
+                    <path d="M15 13v2" />
+                    <path d="M9 13v2" />
+                  </svg>
+                  Current AI Response
+                  <span className="text-xs font-normal px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                    Hidden from user
+                  </span>
+                </h3>
+                <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl max-h-48 overflow-y-auto">
+                  {isRegenerating ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-sm text-muted-foreground">
+                          Generating improved response...
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-foreground whitespace-pre-wrap">
+                      {displayResponse}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Rating Section */}
+              <div className="p-4 bg-white border border-border rounded-xl">
+                <h4 className="text-sm font-semibold text-foreground mb-3">
+                  Rate This Response
+                </h4>
+                <StarRating
+                  rating={currentRating}
+                  onChange={setCurrentRating}
+                  disabled={isLoading || isRegenerating}
+                />
+              </div>
+
+              {/* Admin Instructions for Regeneration */}
+              <div>
+                <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-indigo-500"
+                  >
+                    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                  Instructions for Improvement (Optional)
+                </h4>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Provide specific feedback to guide the AI in generating a
+                  better response
+                </p>
+                <textarea
+                  value={adminInstructions}
+                  onChange={e => setAdminInstructions(e.target.value)}
+                  placeholder="e.g., 'Be more empathetic', 'Don't recommend specific medications', 'Include a disclaimer about seeking professional help'..."
+                  className="w-full h-24 p-3 rounded-xl border border-border bg-slate-50 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  disabled={isLoading || isRegenerating}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                {/* Regenerate Button */}
+                <button
+                  onClick={() => {
+                    if (adminInstructions.trim()) {
+                      onRegenerate(adminInstructions.trim(), currentRating);
+                      setAdminInstructions('');
+                    }
+                  }}
+                  disabled={
+                    !adminInstructions.trim() || isLoading || isRegenerating
+                  }
+                  className="w-full p-4 rounded-xl border-2 border-indigo-200 bg-indigo-50 text-left transition-all hover:border-indigo-400 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-white"
+                      >
+                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                        <path d="M3 3v5h5" />
+                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                        <path d="M16 16h5v5" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-medium text-indigo-700">
+                        Regenerate with Instructions
+                      </p>
+                      <p className="text-sm text-indigo-600/70">
+                        AI will create a new response based on your feedback
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                <div className="flex gap-3">
+                  {/* Block User Button */}
+                  <button
+                    onClick={onBlock}
+                    disabled={isLoading || isRegenerating}
+                    className="flex-1 p-4 rounded-xl border-2 border-rose-200 bg-rose-50 text-left transition-all hover:border-rose-400 hover:bg-rose-100 disabled:opacity-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-rose-500 flex items-center justify-center">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-white"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="m4.9 4.9 14.2 14.2" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="font-medium text-rose-700">Block User</p>
+                        <p className="text-xs text-rose-600/70">
+                          Severe violation
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Approve Button */}
+                  <button
+                    onClick={() => onApprove(currentRating)}
+                    disabled={isLoading || isRegenerating}
+                    className="flex-1 p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50 text-left transition-all hover:border-emerald-400 hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-500 flex items-center justify-center">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-white"
+                        >
+                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                          <polyline points="22 4 12 14.01 9 11.01" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="font-medium text-emerald-700">
+                          Approve & Send
+                        </p>
+                        <p className="text-xs text-emerald-600/70">
+                          Send to user in realtime
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-border bg-slate-50 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              💡 Tip: Rate the response and provide specific instructions to
+              help AI improve. Higher-rated responses help train better AI
+              behavior.
+            </p>
+            <button
+              onClick={onClose}
+              disabled={isLoading || isRegenerating}
+              className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // User Management Modal (existing functionality)
 function ConfirmModal({
   isOpen,
@@ -1248,6 +1821,15 @@ export default function AdminDashboard() {
     useState<PendingHumanReview | null>(null);
   const [originalAIResponse, setOriginalAIResponse] = useState<string>('');
 
+  // State for semantic review modal (Human-in-the-Loop Layer 2)
+  const [semanticReviewModalOpen, setSemanticReviewModalOpen] = useState(false);
+  const [selectedSemanticAnomaly, setSelectedSemanticAnomaly] =
+    useState<SemanticReviewAnomaly | null>(null);
+  const [semanticCurrentResponse, setSemanticCurrentResponse] = useState('');
+  const [semanticIterations, setSemanticIterations] = useState<
+    ReviewIteration[]
+  >([]);
+
   // Fetch users
   const {
     data: usersData,
@@ -1309,6 +1891,45 @@ export default function AdminDashboard() {
     },
   });
 
+  // Semantic review mutations (Human-in-the-Loop Layer 2)
+  const regenerateSemanticMutation =
+    trpc.admin.regenerateSemanticResponse.useMutation({
+      onSuccess: data => {
+        setSemanticCurrentResponse(data.newResponse);
+        // Refresh the review history
+        if (selectedSemanticAnomaly) {
+          utils.admin.getSemanticReviewHistory.invalidate({
+            anomalyId: selectedSemanticAnomaly.id,
+          });
+        }
+      },
+    });
+
+  const approveSemanticMutation = trpc.admin.approveSemanticReview.useMutation({
+    onSuccess: () => {
+      utils.admin.getPendingSemanticReviews.invalidate();
+      utils.admin.getAnomalyStats.invalidate();
+      utils.admin.getStats.invalidate();
+      setSemanticReviewModalOpen(false);
+      setSelectedSemanticAnomaly(null);
+      setSemanticCurrentResponse('');
+      setSemanticIterations([]);
+    },
+  });
+
+  const blockSemanticMutation =
+    trpc.admin.blockUserFromSemanticReview.useMutation({
+      onSuccess: () => {
+        utils.admin.getPendingSemanticReviews.invalidate();
+        utils.admin.getAnomalyStats.invalidate();
+        utils.admin.getStats.invalidate();
+        setSemanticReviewModalOpen(false);
+        setSelectedSemanticAnomaly(null);
+        setSemanticCurrentResponse('');
+        setSemanticIterations([]);
+      },
+    });
+
   // Handler to open human review modal and fetch original AI response
   const handleOpenHumanReviewModal = async (chat: PendingHumanReview) => {
     setSelectedChatForReview(chat);
@@ -1354,6 +1975,53 @@ export default function AdminDashboard() {
         chatId: selectedChatForReview.id,
         action: 'admin_response',
         adminResponse: response,
+      });
+    }
+  };
+
+  // Semantic review handlers (Human-in-the-Loop Layer 2)
+  const handleOpenSemanticReviewModal = (anomaly: SemanticReviewAnomaly) => {
+    setSelectedSemanticAnomaly(anomaly);
+    setSemanticCurrentResponse(anomaly.aiResponse || '');
+    setSemanticIterations([]);
+    setSemanticReviewModalOpen(true);
+  };
+
+  const handleSemanticRegenerate = async (
+    instructions: string,
+    rating: number,
+  ) => {
+    if (selectedSemanticAnomaly) {
+      // Add current iteration to local state
+      const newIteration: ReviewIteration = {
+        response: semanticCurrentResponse,
+        adminInstructions: instructions,
+        rating,
+        timestamp: new Date().toISOString(),
+      };
+      setSemanticIterations(prev => [...prev, newIteration]);
+
+      await regenerateSemanticMutation.mutateAsync({
+        anomalyId: selectedSemanticAnomaly.id,
+        adminInstructions: instructions,
+        currentResponseRating: rating,
+      });
+    }
+  };
+
+  const handleSemanticApprove = async (rating: number) => {
+    if (selectedSemanticAnomaly) {
+      await approveSemanticMutation.mutateAsync({
+        anomalyId: selectedSemanticAnomaly.id,
+        finalRating: rating,
+      });
+    }
+  };
+
+  const handleSemanticBlock = async () => {
+    if (selectedSemanticAnomaly) {
+      await blockSemanticMutation.mutateAsync({
+        anomalyId: selectedSemanticAnomaly.id,
       });
     }
   };
@@ -1508,6 +2176,27 @@ export default function AdminDashboard() {
         onBlock={handleBlock}
         onCorrect={handleCorrect}
         isLoading={reviewAnomalyMutation.isPending}
+      />
+
+      {/* Semantic Review Modal (Human-in-the-Loop Layer 2) */}
+      <SemanticReviewModal
+        isOpen={semanticReviewModalOpen}
+        onClose={() => {
+          setSemanticReviewModalOpen(false);
+          setSelectedSemanticAnomaly(null);
+          setSemanticCurrentResponse('');
+          setSemanticIterations([]);
+        }}
+        anomaly={selectedSemanticAnomaly}
+        onApprove={handleSemanticApprove}
+        onBlock={handleSemanticBlock}
+        onRegenerate={handleSemanticRegenerate}
+        isLoading={
+          approveSemanticMutation.isPending || blockSemanticMutation.isPending
+        }
+        isRegenerating={regenerateSemanticMutation.isPending}
+        currentResponse={semanticCurrentResponse}
+        iterations={semanticIterations}
       />
 
       {/* Header */}
@@ -2167,12 +2856,9 @@ export default function AdminDashboard() {
                           {/* Actions */}
                           <div className="flex-shrink-0">
                             <button
-                              onClick={() => {
-                                setSelectedAnomaly(
-                                  anomaly as unknown as Anomaly,
-                                );
-                                setReviewModalOpen(true);
-                              }}
+                              onClick={() =>
+                                handleOpenSemanticReviewModal(anomaly)
+                              }
                               className="px-4 py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                             >
                               Review & Respond

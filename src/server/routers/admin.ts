@@ -8,6 +8,7 @@ import {
   getUserChannelName,
   PUSHER_EVENTS,
 } from '@/lib/pusher-server';
+import { streamGeminiResponse, ChatMessage } from '@/lib/gemini';
 
 // Type for user with role
 type UserWithRole = {
@@ -296,7 +297,10 @@ export const adminRouter = router({
         });
         console.log(`[Pusher] Warning notification sent to user ${userId}`);
       } catch (pusherError) {
-        console.error('[Pusher] Failed to send warning notification:', pusherError);
+        console.error(
+          '[Pusher] Failed to send warning notification:',
+          pusherError,
+        );
       }
 
       return { success: true, warningCount: newWarningCount };
@@ -802,15 +806,15 @@ export const adminRouter = router({
       // Find the original AI message that triggered the review
       const pendingMessage = chat.humanReviewMessageId
         ? await prisma.message.findUnique({
-          where: { id: chat.humanReviewMessageId },
-        })
+            where: { id: chat.humanReviewMessageId },
+          })
         : null;
 
       // Also find the associated anomaly log
       const anomalyLog = chat.humanReviewMessageId
         ? await prisma.anomalyLog.findFirst({
-          where: { messageId: chat.humanReviewMessageId },
-        })
+            where: { messageId: chat.humanReviewMessageId },
+          })
         : null;
 
       // Prepare the response content and label based on action
@@ -1266,4 +1270,430 @@ export const adminRouter = router({
       recentAnomalies,
     };
   }),
+
+  // ============== Human-in-the-Loop Semantic Review ==============
+
+  // Get review history for an anomaly (all iterations)
+  getSemanticReviewHistory: isAdmin
+    .input(z.object({ anomalyId: z.string() }))
+    .query(async ({ input }) => {
+      const anomaly = await prisma.anomalyLog.findUnique({
+        where: { id: input.anomalyId },
+        include: {
+          message: {
+            include: {
+              chat: {
+                include: {
+                  messages: {
+                    orderBy: { createdAt: 'asc' },
+                    take: 20, // Get conversation context
+                    select: {
+                      id: true,
+                      role: true,
+                      content: true,
+                      createdAt: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!anomaly) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Anomaly not found',
+        });
+      }
+
+      // Parse review iterations from JSON
+      const iterations =
+        (anomaly.reviewIterations as Array<{
+          response: string;
+          adminInstructions: string;
+          rating: number;
+          timestamp: string;
+        }>) || [];
+
+      return {
+        anomalyId: anomaly.id,
+        userQuery: anomaly.userQuery,
+        originalAiResponse: anomaly.aiResponse || '',
+        currentResponse: anomaly.adminResponse || anomaly.aiResponse || '',
+        iterations,
+        iterationCount: anomaly.iterationCount,
+        status: anomaly.status,
+        severity: anomaly.severity,
+        anomalyType: anomaly.anomalyType,
+        accuracyScore: anomaly.accuracyScore,
+        chatContext:
+          anomaly.message?.chat?.messages.map(m => ({
+            role: m.role,
+            content: m.content,
+          })) || [],
+      };
+    }),
+
+  // Regenerate AI response with admin instructions
+  regenerateSemanticResponse: isAdmin
+    .input(
+      z.object({
+        anomalyId: z.string(),
+        adminInstructions: z.string().min(1),
+        currentResponseRating: z.number().min(1).max(5),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { anomalyId, adminInstructions, currentResponseRating } = input;
+
+      const anomaly = await prisma.anomalyLog.findUnique({
+        where: { id: anomalyId },
+        include: {
+          message: {
+            include: {
+              chat: {
+                include: {
+                  messages: {
+                    orderBy: { createdAt: 'asc' },
+                    take: 10, // Get recent conversation context
+                    select: {
+                      role: true,
+                      content: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!anomaly) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Anomaly not found',
+        });
+      }
+
+      if (anomaly.status !== 'pending') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'This review has already been completed',
+        });
+      }
+
+      // Get current iterations
+      const existingIterations =
+        (anomaly.reviewIterations as Array<{
+          response: string;
+          adminInstructions: string;
+          rating: number;
+          timestamp: string;
+        }>) || [];
+
+      // Current response to rate (either last iteration or original)
+      const currentResponse =
+        existingIterations.length > 0
+          ? existingIterations[existingIterations.length - 1].response
+          : anomaly.aiResponse || '';
+
+      // Add current response with rating to iterations
+      const newIteration = {
+        response: currentResponse,
+        adminInstructions,
+        rating: currentResponseRating,
+        timestamp: new Date().toISOString(),
+      };
+
+      const updatedIterations = [...existingIterations, newIteration];
+
+      // Build the prompt for regeneration with all context
+      const iterationsContext = updatedIterations
+        .map(
+          (iter, idx) =>
+            `--- Attempt ${idx + 1} ---
+Response: ${iter.response}
+Admin Rating: ${iter.rating}/5 stars
+Admin Feedback: ${iter.adminInstructions}
+`,
+        )
+        .join('\n');
+
+      const systemPrompt = `You are a helpful AI assistant. The admin has reviewed your previous responses and provided feedback. Generate an improved response based on the following context:
+
+IMPORTANT GUIDELINES:
+- This is a sensitive query that requires careful handling
+- The admin has rated previous attempts and provided specific feedback
+- Incorporate ALL admin feedback to improve the response
+- Be accurate, helpful, and safe
+- Do NOT provide medical diagnoses or specific medication recommendations
+- If the query is about health, recommend seeking professional medical advice
+
+USER'S ORIGINAL QUERY:
+${anomaly.userQuery}
+
+CONVERSATION CONTEXT:
+${anomaly.message?.chat?.messages.map(m => `${m.role}: ${m.content}`).join('\n') || 'No prior context'}
+
+PREVIOUS ATTEMPTS AND ADMIN FEEDBACK:
+${iterationsContext}
+
+Generate an improved response that addresses all the admin's feedback. Be concise, accurate, and helpful while maintaining safety guidelines.`;
+
+      // Generate new response using Gemini
+      const messages: ChatMessage[] = [
+        {
+          role: 'user',
+          parts: [{ text: anomaly.userQuery }],
+        },
+      ];
+
+      let newResponse = '';
+      try {
+        for await (const chunk of streamGeminiResponse(
+          messages,
+          systemPrompt,
+        )) {
+          newResponse += chunk;
+        }
+      } catch (error) {
+        console.error('Error generating response:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to generate new response',
+        });
+      }
+
+      // Update the anomaly with new iteration history
+      await prisma.anomalyLog.update({
+        where: { id: anomalyId },
+        data: {
+          reviewIterations: updatedIterations,
+          iterationCount: updatedIterations.length,
+          adminResponse: newResponse, // Store latest response
+        },
+      });
+
+      return {
+        success: true,
+        newResponse,
+        iterationCount: updatedIterations.length,
+      };
+    }),
+
+  // Approve semantic review response (send to client)
+  approveSemanticReview: isAdmin
+    .input(
+      z.object({
+        anomalyId: z.string(),
+        finalRating: z.number().min(1).max(5).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { anomalyId, finalRating } = input;
+
+      const anomaly = await prisma.anomalyLog.findUnique({
+        where: { id: anomalyId },
+        include: { message: true },
+      });
+
+      if (!anomaly) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Anomaly not found',
+        });
+      }
+
+      if (anomaly.status !== 'pending') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'This review has already been completed',
+        });
+      }
+
+      // Get the current response (either from iterations or original)
+      const existingIterations =
+        (anomaly.reviewIterations as Array<{
+          response: string;
+          adminInstructions: string;
+          rating: number;
+          timestamp: string;
+        }>) || [];
+
+      const approvedResponse =
+        anomaly.adminResponse || anomaly.aiResponse || '';
+
+      // If there's a final rating, add it to iterations
+      if (finalRating && existingIterations.length > 0) {
+        const lastIteration = existingIterations[existingIterations.length - 1];
+        // Only update if this is rating a new response
+        if (lastIteration.response !== approvedResponse) {
+          existingIterations.push({
+            response: approvedResponse,
+            adminInstructions: 'APPROVED',
+            rating: finalRating,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+
+      // Update the anomaly log
+      await prisma.anomalyLog.update({
+        where: { id: anomalyId },
+        data: {
+          status: 'corrected',
+          reviewedBy: ctx.session.user.id,
+          reviewedAt: new Date(),
+          adminResponse: approvedResponse,
+          reviewIterations: existingIterations,
+          feedbackApplied: true,
+          reviewNotes: `Approved after ${existingIterations.length} iterations. Final rating: ${finalRating || 'N/A'}`,
+        },
+      });
+
+      // Update the message with approved response
+      if (anomaly.message) {
+        await prisma.message.update({
+          where: { id: anomaly.messageId },
+          data: {
+            content: approvedResponse,
+            isBlocked: false,
+            isWarning: false,
+            isPendingReview: false,
+            isAdminCorrected: true,
+            correctedBy: ctx.session.user.id,
+            correctedAt: new Date(),
+            hasNotification: true,
+            notificationRead: false,
+          },
+        });
+      }
+
+      // Unblock the chat
+      const chat = await prisma.chat.findUnique({
+        where: { id: anomaly.chatId },
+      });
+
+      if (chat?.isHumanReviewBlocked) {
+        await prisma.chat.update({
+          where: { id: anomaly.chatId },
+          data: {
+            isHumanReviewBlocked: false,
+            humanReviewStatus: 'corrected',
+            humanReviewAdminId: ctx.session.user.id,
+            humanReviewedAt: new Date(),
+            humanReviewLocked: true,
+            humanReviewMessage: '✅ Response reviewed and approved by Admin',
+            humanReviewResponse: approvedResponse,
+          },
+        });
+      }
+
+      // Trigger Pusher event to send response to client in real-time
+      const channelName = getChatChannelName(anomaly.chatId);
+      console.log(
+        `[Pusher] Triggering semantic review approval on channel: ${channelName}`,
+      );
+
+      try {
+        await pusher.trigger(channelName, PUSHER_EVENTS.ADMIN_RESPONSE, {
+          chatId: anomaly.chatId,
+          action: 'semantic_approved',
+          responseLabel: '✅ Response reviewed and approved',
+          adminResponse: approvedResponse,
+          messageId: anomaly.messageId,
+          timestamp: new Date().toISOString(),
+        });
+        console.log('[Pusher] Semantic review approval sent successfully');
+
+        // Also notify the user
+        const userChannelName = getUserChannelName(anomaly.userId);
+        await pusher.trigger(userChannelName, PUSHER_EVENTS.NOTIFICATION, {
+          id: anomaly.messageId,
+          chatId: anomaly.chatId,
+          chatTitle: chat?.title || 'Untitled Chat',
+          action: 'semantic_approved',
+          message:
+            'Your message has been reviewed and a response is now available',
+          timestamp: new Date().toISOString(),
+        });
+      } catch (pusherError) {
+        console.error('[Pusher] Failed to send approval:', pusherError);
+      }
+
+      return {
+        success: true,
+        approvedResponse,
+        iterationCount: existingIterations.length,
+      };
+    }),
+
+  // Block user from semantic review
+  blockUserFromSemanticReview: isAdmin
+    .input(z.object({ anomalyId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const { anomalyId } = input;
+
+      const anomaly = await prisma.anomalyLog.findUnique({
+        where: { id: anomalyId },
+      });
+
+      if (!anomaly) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Anomaly not found',
+        });
+      }
+
+      // Block the user
+      await prisma.user.update({
+        where: { id: anomaly.userId },
+        data: {
+          isBlocked: true,
+          blockedAt: new Date(),
+          blockedBy: ctx.session.user.id,
+          blockedReason: `Blocked due to ${anomaly.anomalyType} during semantic review`,
+        },
+      });
+
+      // Update anomaly status
+      await prisma.anomalyLog.update({
+        where: { id: anomalyId },
+        data: {
+          status: 'blocked',
+          reviewedBy: ctx.session.user.id,
+          reviewedAt: new Date(),
+          reviewNotes: 'User blocked during semantic review',
+        },
+      });
+
+      // Update message
+      if (anomaly.messageId) {
+        await prisma.message.update({
+          where: { id: anomaly.messageId },
+          data: {
+            content: '',
+            isBlocked: true,
+            isPendingReview: false,
+          },
+        });
+      }
+
+      // Unblock the chat (user is blocked anyway)
+      await prisma.chat.update({
+        where: { id: anomaly.chatId },
+        data: {
+          isHumanReviewBlocked: false,
+          humanReviewStatus: 'blocked',
+          humanReviewAdminId: ctx.session.user.id,
+          humanReviewedAt: new Date(),
+          humanReviewLocked: true,
+          humanReviewMessage: '🚫 Account blocked by Admin',
+        },
+      });
+
+      return { success: true };
+    }),
 });
