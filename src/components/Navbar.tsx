@@ -4,7 +4,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useSession } from '@/lib/auth-client';
 import { UserDropdown } from '@/components/UserDropdown';
-import { motion } from 'framer-motion';
+import { motion, useScroll, useTransform } from 'framer-motion';
+import { useEffect, useState } from 'react';
 
 export function Navbar() {
   const { data: session, isPending } = useSession();
@@ -80,6 +81,7 @@ export function Navbar() {
                     Chat
                   </Link>
                 </motion.div>
+                <NotificationBell />
                 <UserDropdown user={session.user} />
               </>
             ) : (
