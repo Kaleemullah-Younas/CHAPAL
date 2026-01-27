@@ -151,7 +151,7 @@ function ReviewModal({
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-foreground">
-                  Human-in-the-Loop Review
+                  ADMIN REVIEW
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   Review and take action on flagged interaction
