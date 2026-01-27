@@ -56,6 +56,16 @@ export default async function authMiddleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/admin', request.url));
   }
 
+  // Redirect regular users from home to chat
+  if (
+    isHomePage &&
+    sessionData &&
+    sessionData.user.role === 'user' &&
+    sessionData.user.emailVerified
+  ) {
+    return NextResponse.redirect(new URL('/chat', request.url));
+  }
+
   // Handle admin routes
   if (isAdminPage) {
     if (!sessionData) {
