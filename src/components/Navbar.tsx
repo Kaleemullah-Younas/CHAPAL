@@ -6,6 +6,7 @@ import { useSession } from '@/lib/auth-client';
 import { UserDropdown } from '@/components/UserDropdown';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { NotificationBell } from '@/components/NotificationBell';
 
 export function Navbar() {
   const { data: session, isPending } = useSession();
@@ -28,7 +29,7 @@ export function Navbar() {
                 alt="CHAPAL Logo"
                 width={28}
                 height={28}
-                className="drop-shadow-sm"
+                className="drop-shadow-sm w-7 h-auto"
                 priority
               />
             </motion.div>
