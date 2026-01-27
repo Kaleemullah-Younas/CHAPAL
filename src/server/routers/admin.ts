@@ -558,10 +558,14 @@ export const adminRouter = router({
               userQuery: anomaly.userQuery,
               originalAiResponse: anomaly.aiResponse || '',
               adminResponse: adminResponse,
-              adminInstructions: reviewNotes || 'Admin provided corrected response',
+              adminInstructions:
+                reviewNotes || 'Admin provided corrected response',
               anomalyType: anomaly.anomalyType,
               severity: anomaly.severity,
-              chatContext: chatMessages.map(m => ({ role: m.role, content: m.content })),
+              chatContext: chatMessages.map(m => ({
+                role: m.role,
+                content: m.content,
+              })),
               rating: 5, // Human responses get top rating
               iterationCount: 1,
               userId: anomaly.userId,
@@ -577,7 +581,10 @@ export const adminRouter = router({
               aiResponse: anomaly.aiResponse || '',
               anomalyType: anomaly.anomalyType,
               severity: anomaly.severity,
-              chatContext: chatMessages.map(m => ({ role: m.role, content: m.content })),
+              chatContext: chatMessages.map(m => ({
+                role: m.role,
+                content: m.content,
+              })),
               userId: anomaly.userId,
               chatId: anomaly.chatId,
               anomalyId: anomaly.id,
@@ -592,7 +599,9 @@ export const adminRouter = router({
                 isIndexedInPinecone: true,
               },
             });
-            console.log(`[Pinecone] Stored feedback for anomaly ${id}: ${pineconeVectorId}`);
+            console.log(
+              `[Pinecone] Stored feedback for anomaly ${id}: ${pineconeVectorId}`,
+            );
           }
         } catch (pineconeError) {
           console.error('[Pinecone] Error storing feedback:', pineconeError);
@@ -1493,7 +1502,10 @@ Admin Feedback: ${iter.adminInstructions}
       // Search for similar cases from previous admin corrections
       let learningContext = '';
       try {
-        console.log('[Pinecone] Searching for similar feedback for query:', anomaly.userQuery.substring(0, 100));
+        console.log(
+          '[Pinecone] Searching for similar feedback for query:',
+          anomaly.userQuery.substring(0, 100),
+        );
         const similarFeedback = await searchSimilarFeedback(anomaly.userQuery, {
           topK: 5,
           minRating: 3,
@@ -1501,14 +1513,19 @@ Admin Feedback: ${iter.adminInstructions}
           includeAiApproved: true, // AI responses approved by admin
           includeChatHistory: false, // Only use admin-reviewed content for learning
         });
-        
+
         if (similarFeedback.length > 0) {
           learningContext = buildLearningContext(similarFeedback, 3);
-          console.log(`[Pinecone] Found ${similarFeedback.length} similar cases for learning context`);
+          console.log(
+            `[Pinecone] Found ${similarFeedback.length} similar cases for learning context`,
+          );
         }
       } catch (pineconeError) {
         // Log but don't fail - Pinecone is enhancement, not required
-        console.error('[Pinecone] Error searching similar feedback:', pineconeError);
+        console.error(
+          '[Pinecone] Error searching similar feedback:',
+          pineconeError,
+        );
       }
 
       const systemPrompt = `You are a helpful AI assistant. The admin has reviewed your previous responses and provided feedback. Generate an improved response based on the following context:
@@ -1660,18 +1677,23 @@ Generate an improved response that addresses all the admin's feedback. Be concis
         // - If no iterations but response differs: This shouldn't happen in semantic review flow
         // - If no iterations and response same: Original AI response approved
         const wasRegenerated = existingIterations.length > 0;
-        
+
         if (wasRegenerated) {
           // AI REGENERATED AND APPROVED - AI wrote it but with admin guidance
-          const lastIteration = existingIterations[existingIterations.length - 1];
+          const lastIteration =
+            existingIterations[existingIterations.length - 1];
           pineconeVectorId = await storeFeedback({
             userQuery: anomaly.userQuery,
             originalAiResponse: anomaly.aiResponse || '',
             adminResponse: approvedResponse,
-            adminInstructions: lastIteration?.adminInstructions || 'Approved after review',
+            adminInstructions:
+              lastIteration?.adminInstructions || 'Approved after review',
             anomalyType: anomaly.anomalyType,
             severity: anomaly.severity,
-            chatContext: chatMessages.map(m => ({ role: m.role, content: m.content })),
+            chatContext: chatMessages.map(m => ({
+              role: m.role,
+              content: m.content,
+            })),
             rating: finalRating || lastIteration?.rating || 4,
             iterationCount: existingIterations.length,
             userId: anomaly.userId,
@@ -1687,7 +1709,10 @@ Generate an improved response that addresses all the admin's feedback. Be concis
             aiResponse: approvedResponse,
             anomalyType: anomaly.anomalyType,
             severity: anomaly.severity,
-            chatContext: chatMessages.map(m => ({ role: m.role, content: m.content })),
+            chatContext: chatMessages.map(m => ({
+              role: m.role,
+              content: m.content,
+            })),
             userId: anomaly.userId,
             chatId: anomaly.chatId,
             anomalyId: anomaly.id,
@@ -1703,7 +1728,9 @@ Generate an improved response that addresses all the admin's feedback. Be concis
               isIndexedInPinecone: true,
             },
           });
-          console.log(`[Pinecone] Stored feedback for anomaly ${anomalyId}: ${pineconeVectorId}`);
+          console.log(
+            `[Pinecone] Stored feedback for anomaly ${anomalyId}: ${pineconeVectorId}`,
+          );
         }
       } catch (pineconeError) {
         // Log but don't fail - Pinecone is enhancement, not required
@@ -1860,14 +1887,15 @@ Generate an improved response that addresses all the admin's feedback. Be concis
   getPineconeFeedbackStats: isAdmin.query(async () => {
     try {
       const stats = await getFeedbackStats();
-      
+
       // Also get database stats for comparison
-      const [totalAnomalies, indexedAnomalies, approvedCount, correctedCount] = await Promise.all([
-        prisma.anomalyLog.count(),
-        prisma.anomalyLog.count({ where: { isIndexedInPinecone: true } }),
-        prisma.anomalyLog.count({ where: { status: 'approved' } }),
-        prisma.anomalyLog.count({ where: { status: 'corrected' } }),
-      ]);
+      const [totalAnomalies, indexedAnomalies, approvedCount, correctedCount] =
+        await Promise.all([
+          prisma.anomalyLog.count(),
+          prisma.anomalyLog.count({ where: { isIndexedInPinecone: true } }),
+          prisma.anomalyLog.count({ where: { status: 'approved' } }),
+          prisma.anomalyLog.count({ where: { status: 'corrected' } }),
+        ]);
 
       return {
         pinecone: stats,
@@ -1895,10 +1923,7 @@ Generate an improved response that addresses all the admin's feedback. Be concis
       // Get all approved/corrected anomalies that haven't been indexed
       const unindexedAnomalies = await prisma.anomalyLog.findMany({
         where: {
-          OR: [
-            { status: 'approved' },
-            { status: 'corrected' },
-          ],
+          OR: [{ status: 'approved' }, { status: 'corrected' }],
           isIndexedInPinecone: false,
         },
         include: {
@@ -1918,40 +1943,58 @@ Generate an improved response that addresses all the admin's feedback. Be concis
         },
       });
 
-      console.log(`[Pinecone] Found ${unindexedAnomalies.length} unindexed anomalies to bootstrap`);
+      console.log(
+        `[Pinecone] Found ${unindexedAnomalies.length} unindexed anomalies to bootstrap`,
+      );
 
       // Prepare feedback items for batch indexing
       const feedbackItems = unindexedAnomalies
         .filter(a => a.userQuery && (a.adminResponse || a.aiResponse))
         .map(a => {
-          const iterations = (a.reviewIterations as Array<{
-            adminInstructions: string;
-            rating: number;
-          }>) || [];
+          const iterations =
+            (a.reviewIterations as Array<{
+              adminInstructions: string;
+              rating: number;
+            }>) || [];
           const lastIteration = iterations[iterations.length - 1];
-          
+
           // Determine response source:
           // - If status is 'corrected' and adminResponse differs from aiResponse: human wrote it
           // - If status is 'corrected' and has iterations: AI regenerated with guidance
           // - If status is 'approved': original AI response was approved
           const hasIterations = iterations.length > 0;
-          const adminWroteResponse = a.status === 'corrected' && !hasIterations && a.adminResponse !== a.aiResponse;
-          
-          const responseSource: 'human' | 'ai' = adminWroteResponse ? 'human' : 'ai';
+          const adminWroteResponse =
+            a.status === 'corrected' &&
+            !hasIterations &&
+            a.adminResponse !== a.aiResponse;
+
+          const responseSource: 'human' | 'ai' = adminWroteResponse
+            ? 'human'
+            : 'ai';
           const wasRegenerated = hasIterations;
 
           return {
             userQuery: a.userQuery,
             originalAiResponse: a.aiResponse || '',
             adminResponse: a.adminResponse || a.aiResponse || '',
-            adminInstructions: lastIteration?.adminInstructions || a.reviewNotes || 'Admin reviewed',
+            adminInstructions:
+              lastIteration?.adminInstructions ||
+              a.reviewNotes ||
+              'Admin reviewed',
             anomalyType: a.anomalyType,
             severity: a.severity,
-            chatContext: a.message?.chat?.messages.map(m => ({
-              role: m.role,
-              content: m.content,
-            })) || [],
-            rating: lastIteration?.rating || (a.status === 'approved' ? 5 : (responseSource === 'human' ? 5 : 4)),
+            chatContext:
+              a.message?.chat?.messages.map(m => ({
+                role: m.role,
+                content: m.content,
+              })) || [],
+            rating:
+              lastIteration?.rating ||
+              (a.status === 'approved'
+                ? 5
+                : responseSource === 'human'
+                  ? 5
+                  : 4),
             iterationCount: a.iterationCount,
             userId: a.userId,
             chatId: a.chatId,
@@ -1966,7 +2009,9 @@ Generate an improved response that addresses all the admin's feedback. Be concis
 
       // Update the indexed status in database
       if (indexedCount > 0) {
-        const indexedIds = feedbackItems.slice(0, indexedCount).map(f => f.anomalyId);
+        const indexedIds = feedbackItems
+          .slice(0, indexedCount)
+          .map(f => f.anomalyId);
         await prisma.anomalyLog.updateMany({
           where: { id: { in: indexedIds } },
           data: { isIndexedInPinecone: true },

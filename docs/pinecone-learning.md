@@ -71,20 +71,25 @@ console.log(result.message); // "Successfully indexed X feedback items into Pine
 ## Admin API Endpoints
 
 ### Get Pinecone Stats
+
 ```typescript
 const stats = await trpc.admin.getPineconeFeedbackStats.query();
 // Returns: { pinecone: { totalVectors }, database: { totalAnomalies, indexedAnomalies, ... } }
 ```
 
 ### Bootstrap Existing Feedback
+
 ```typescript
 const result = await trpc.admin.bootstrapPineconeFeedback.mutate();
 // Indexes all unindexed approved/corrected anomalies
 ```
 
 ### Test Similarity Search
+
 ```typescript
-const results = await trpc.admin.testSimilaritySearch.query({ query: "your test query" });
+const results = await trpc.admin.testSimilaritySearch.query({
+  query: 'your test query',
+});
 // Returns similar feedback items from the database
 ```
 
@@ -138,15 +143,18 @@ Admin Instructions: Do not recommend specific dosages. Always recommend consulti
 ## Troubleshooting
 
 ### Pinecone Connection Issues
+
 - Verify your `PINECONE_API_KEY` is correct
 - Check that the index `chapal-feedback` exists
 - Ensure the index dimensions match (768)
 
 ### Missing Embeddings
+
 - Check if `GEMINI_API_KEY` is set for embedding generation
 - Verify Gemini API quota isn't exhausted
 
 ### Learning Not Improving
+
 - Run `bootstrapPineconeFeedback` to index existing corrections
 - Use `testSimilaritySearch` to verify similar items are found
 - Ensure admin corrections have proper instructions and ratings

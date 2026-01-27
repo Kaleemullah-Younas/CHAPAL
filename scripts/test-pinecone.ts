@@ -38,12 +38,14 @@ async function testPinecone() {
     console.log('\nChecking existing indexes...');
     const indexList = await pinecone.listIndexes();
     console.log(`✓ Found ${indexList.indexes?.length || 0} indexes:`);
-    indexList.indexes?.forEach((idx) => {
+    indexList.indexes?.forEach(idx => {
       console.log(`  - ${idx.name} (${idx.dimension}D, ${idx.metric})`);
     });
 
     // Check if our index exists
-    const existingIndex = indexList.indexes?.find((idx) => idx.name === INDEX_NAME);
+    const existingIndex = indexList.indexes?.find(
+      idx => idx.name === INDEX_NAME,
+    );
 
     if (existingIndex) {
       console.log(`\n✓ Index '${INDEX_NAME}' already exists!`);
@@ -53,7 +55,9 @@ async function testPinecone() {
       const stats = await index.describeIndexStats();
       console.log('\nIndex Statistics:');
       console.log(`  - Total vectors: ${stats.totalRecordCount || 0}`);
-      console.log(`  - Namespaces: ${Object.keys(stats.namespaces || {}).length}`);
+      console.log(
+        `  - Namespaces: ${Object.keys(stats.namespaces || {}).length}`,
+      );
     } else {
       console.log(`\n⚠ Index '${INDEX_NAME}' does not exist. Creating...`);
 
@@ -71,7 +75,9 @@ async function testPinecone() {
       });
 
       console.log(`\n✓ Index '${INDEX_NAME}' creation initiated!`);
-      console.log('Note: It may take a few minutes for the index to be fully ready.');
+      console.log(
+        'Note: It may take a few minutes for the index to be fully ready.',
+      );
 
       // Wait for index to be ready
       console.log('\nWaiting for index to be ready...');
@@ -79,7 +85,7 @@ async function testPinecone() {
       const maxAttempts = 60;
 
       while (attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         try {
           const description = await pinecone.describeIndex(INDEX_NAME);
           if (description.status?.ready) {
@@ -88,13 +94,17 @@ async function testPinecone() {
           }
           console.log(`  Waiting... (${attempts + 1}/${maxAttempts})`);
         } catch {
-          console.log(`  Index not ready yet... (${attempts + 1}/${maxAttempts})`);
+          console.log(
+            `  Index not ready yet... (${attempts + 1}/${maxAttempts})`,
+          );
         }
         attempts++;
       }
 
       if (attempts >= maxAttempts) {
-        console.log('\n⚠ Index is still initializing. Check Pinecone dashboard for status.');
+        console.log(
+          '\n⚠ Index is still initializing. Check Pinecone dashboard for status.',
+        );
       }
     }
 

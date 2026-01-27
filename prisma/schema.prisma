@@ -161,7 +161,7 @@ model AnomalyLog {
   iterationCount   Int   @default(0) // Number of regeneration attempts
 
   // Pinecone vector embedding tracking
-  pineconeVectorId String? // ID of the vector stored in Pinecone for learning
+  pineconeVectorId    String? // ID of the vector stored in Pinecone for learning
   isIndexedInPinecone Boolean @default(false) // Whether this feedback has been indexed
 
   createdAt DateTime @default(now())
