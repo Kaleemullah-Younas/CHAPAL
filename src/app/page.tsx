@@ -179,8 +179,8 @@ function HeroSection() {
             className="mt-16 grid grid-cols-2 sm:grid-cols-4 gap-8 max-w-3xl mx-auto"
           >
             {[
-              { value: '100+', label: 'Active Users' },
-              { value: '50K+', label: 'Messages Analyzed' },
+              { value: '7+', label: 'Detection Modes' },
+              { value: '100+', label: 'Messages Analyzed' },
               { value: '99.2%', label: 'Detection Rate' },
               { value: '24/7', label: 'AI Monitoring' },
             ].map((stat, index) => (
