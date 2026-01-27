@@ -138,6 +138,20 @@ export const chatRouter = router({
   createChat: protectedProcedure
     .input(z.object({ title: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
+      // Check if user is blocked
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { isBlocked: true },
+      });
+
+      if (user?.isBlocked) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message:
+            'Your account has been blocked. You cannot create new chats.',
+        });
+      }
+
       const chat = await prisma.chat.create({
         data: {
           title: input.title || 'New Chat',

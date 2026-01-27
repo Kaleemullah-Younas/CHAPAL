@@ -458,6 +458,33 @@ export const adminRouter = router({
             },
           });
         }
+
+        // Trigger Pusher event to notify user's chat in real-time
+        const approveChannelName = getChatChannelName(anomaly.chatId);
+        console.log(
+          `[Pusher] Triggering approve event on channel: ${approveChannelName}, event: ${PUSHER_EVENTS.ADMIN_RESPONSE}`,
+        );
+
+        try {
+          await pusher.trigger(
+            approveChannelName,
+            PUSHER_EVENTS.ADMIN_RESPONSE,
+            {
+              chatId: anomaly.chatId,
+              action: 'approve',
+              responseLabel: '✅ Approved by Admin',
+              adminResponse: originalContent,
+              messageId: anomaly.messageId,
+              timestamp: new Date().toISOString(),
+            },
+          );
+          console.log('[Pusher] Approve event triggered successfully');
+        } catch (pusherError) {
+          console.error(
+            '[Pusher] Failed to trigger approve event:',
+            pusherError,
+          );
+        }
       }
 
       // If blocked, block the USER completely (dead user)
@@ -503,44 +530,33 @@ export const adminRouter = router({
         }
       }
 
-      // If corrected, create a NEW assistant message with the admin response
+      // If corrected, update the existing assistant message with the admin response
       // This is the "human-in-the-loop" feedback loop
-      // The original message is preserved, and the admin response is added as a new message
       if (action === 'correct' && adminResponse && anomaly.messageId) {
-        // Store original content for learning on the original message
+        // Update the existing message with the admin response
         if (anomaly.message) {
           await prisma.message.update({
             where: { id: anomaly.messageId },
             data: {
-              // Store original for learning
-              originalContent: anomaly.message.content || anomaly.aiResponse,
-              // No longer pending, keep original content
+              // Replace content with admin response
+              content: adminResponse,
+              // Store original AI response for learning
+              originalContent:
+                anomaly.message.originalContent || anomaly.aiResponse,
+              // Mark as admin corrected
+              isAdminCorrected: true,
+              correctedBy: ctx.session.user.id,
+              correctedAt: new Date(),
+              // No longer pending
               isPendingReview: false,
               isBlocked: false,
               isWarning: false,
+              // Notification for user
+              hasNotification: true,
+              notificationRead: false,
             },
           });
         }
-
-        // Create a NEW assistant message with the admin response
-        await prisma.message.create({
-          data: {
-            chatId: anomaly.chatId,
-            role: 'assistant',
-            content: adminResponse,
-            // Mark as admin corrected
-            isAdminCorrected: true,
-            correctedBy: ctx.session.user.id,
-            correctedAt: new Date(),
-            // No longer pending
-            isPendingReview: false,
-            isBlocked: false,
-            isWarning: false,
-            // Notification for user
-            hasNotification: true,
-            notificationRead: false,
-          },
-        });
 
         // Unblock the chat if it was blocked
         if (isChatBlocked) {

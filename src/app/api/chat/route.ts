@@ -52,6 +52,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Check if user is blocked
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { isBlocked: true },
+    });
+
+    if (user?.isBlocked) {
+      return NextResponse.json(
+        { error: 'Your account has been blocked. You cannot use the chatbot.' },
+        { status: 403 },
+      );
+    }
+
     const body = await req.json();
     const {
       chatId,
@@ -194,7 +207,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // If message is blocked by Layer 1, create anomaly log and return blocked response
+    // If message is blocked by Layer 1
     if (layer1Result.isBlocked) {
       // Get primary anomaly for logging
       const primaryAnomaly = layer1Result.anomalies[0];
@@ -208,21 +221,108 @@ export async function POST(req: NextRequest) {
         a => a.type === 'safety',
       )?.subType;
 
-      // Block the chat if it's a safety issue
+      // For safety issues, we still generate the AI response for admin review
+      // but don't show it to the user until admin approves
       if (isSafetyIssue) {
+        // Generate AI response for admin review (hidden from user)
+        let generatedAIResponse: string | null = null;
+        try {
+          const systemPrompt = `You are a helpful AI assistant. Be concise but thorough in your responses. If the user shares images or documents, analyze them carefully and provide relevant insights.`;
+
+          // Generate response without streaming (for admin review)
+          const responseChunks: string[] = [];
+          for await (const chunk of streamGeminiResponse(
+            geminiHistory,
+            systemPrompt,
+          )) {
+            responseChunks.push(chunk);
+          }
+          generatedAIResponse = responseChunks.join('');
+        } catch (error) {
+          console.error(
+            'Error generating AI response for admin review:',
+            error,
+          );
+          // Continue even if generation fails - admin will see null response
+        }
+
+        // Update user message to mark as pending review
+        await prisma.message.update({
+          where: { id: userMessage.id },
+          data: { isPendingReview: true },
+        });
+
+        // Create assistant message with hidden content (for admin to review)
+        const assistantMessage = await prisma.message.create({
+          data: {
+            chatId,
+            role: 'assistant',
+            content: '', // Hidden from user
+            originalContent: generatedAIResponse, // Stored for admin review
+            isPendingReview: true,
+            isBlocked: true,
+          },
+        });
+
+        // Block the chat for admin review
         await prisma.chat.update({
           where: { id: chatId },
           data: {
             isHumanReviewBlocked: true,
             humanReviewReason: safetySubType || 'safety',
-            humanReviewMessageId: userMessage.id,
+            humanReviewMessageId: assistantMessage.id,
             humanReviewStatus: 'pending',
             humanReviewMessage: `This chat has been blocked due to ${primaryAnomaly?.message?.toLowerCase() || 'safety concerns'}. An admin will review this conversation. Please start a new chat.`,
           },
         });
+
+        // Create anomaly log for admin review with the generated AI response
+        await prisma.anomalyLog.create({
+          data: {
+            messageId: assistantMessage.id,
+            userId: session.user.id,
+            userEmail: session.user.email,
+            chatId,
+            anomalyType: primaryAnomaly?.type || 'unknown',
+            severity: primaryAnomaly?.severity || 'high',
+            layer: 'deterministic',
+            userQuery: message,
+            aiResponse: generatedAIResponse, // Include AI response for admin review
+            detectionDetails: layer1Result as object,
+            safetyScore: layer1Result.safetyScore,
+            userEmotion: layer1Result.userEmotion,
+            status: 'pending', // Pending admin review
+          },
+        });
+
+        // Return blocked response
+        return NextResponse.json({
+          blocked: true,
+          chatBlocked: true,
+          layer: 'deterministic',
+          detection: {
+            layer: 'deterministic',
+            isBlocked: true,
+            isWarning: false,
+            isPendingReview: true,
+            isSafe: false,
+            safetyScore: layer1Result.safetyScore,
+            accuracyScore: 100,
+            userEmotion: layer1Result.userEmotion,
+            emotionIntensity: layer1Result.emotionIntensity,
+            anomalies: layer1Result.anomalies.map(a => ({
+              type: a.type,
+              subType: a.subType,
+              severity: a.severity,
+              message: a.message,
+            })),
+            blockMessage: `🚫 Message Blocked: ${primaryAnomaly?.message || 'Safety protocols triggered'}. This chat has been blocked and sent for admin review. Please start a new chat.`,
+          },
+          messageId: userMessage.id,
+        });
       }
 
-      // Create anomaly log for admin review
+      // For non-safety blocks (injection, etc.), block without AI generation
       await prisma.anomalyLog.create({
         data: {
           messageId: userMessage.id,
@@ -233,24 +333,24 @@ export async function POST(req: NextRequest) {
           severity: primaryAnomaly?.severity || 'high',
           layer: 'deterministic',
           userQuery: message,
-          aiResponse: null, // Blocked before AI generation
+          aiResponse: null,
           detectionDetails: layer1Result as object,
           safetyScore: layer1Result.safetyScore,
           userEmotion: layer1Result.userEmotion,
-          status: isSafetyIssue ? 'pending' : 'blocked', // Pending review for safety issues
+          status: 'blocked',
         },
       });
 
       // Return blocked response
       return NextResponse.json({
         blocked: true,
-        chatBlocked: isSafetyIssue, // Flag to indicate chat is blocked
+        chatBlocked: false,
         layer: 'deterministic',
         detection: {
           layer: 'deterministic',
           isBlocked: true,
           isWarning: false,
-          isPendingReview: isSafetyIssue,
+          isPendingReview: false,
           isSafe: false,
           safetyScore: layer1Result.safetyScore,
           accuracyScore: 100,
@@ -262,10 +362,9 @@ export async function POST(req: NextRequest) {
             severity: a.severity,
             message: a.message,
           })),
-          blockMessage: isSafetyIssue
-            ? `🚫 Message Blocked: ${primaryAnomaly?.message || 'Safety protocols triggered'}. This chat has been blocked and sent for admin review. Please start a new chat.`
-            : layer1Result.userMessage ||
-              `Message Blocked. ${primaryAnomaly?.message || 'Security protocols triggered'}. This incident has been logged.`,
+          blockMessage:
+            layer1Result.userMessage ||
+            `Message Blocked. ${primaryAnomaly?.message || 'Security protocols triggered'}. This incident has been logged.`,
         },
         messageId: userMessage.id,
       });

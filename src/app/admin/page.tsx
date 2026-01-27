@@ -211,17 +211,25 @@ function ReviewModal({
               </div>
             </div>
 
-            {/* Blocked AI Response */}
+            {/* AI Response */}
             <div className="mb-4">
               <label className="text-sm font-medium text-muted-foreground mb-2 block">
                 {anomaly.aiResponse
-                  ? 'Blocked AI Response'
+                  ? 'AI Response (Pending Review)'
                   : 'AI Response (Not Generated)'}
               </label>
-              <div className="p-3 bg-white rounded-lg border border-rose-200 text-sm">
+              <div
+                className={`p-3 bg-white rounded-lg border text-sm ${anomaly.aiResponse ? 'border-amber-200' : 'border-rose-200'}`}
+              >
                 {anomaly.aiResponse ||
                   'Message was blocked before AI could generate a response.'}
               </div>
+              {anomaly.aiResponse && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Review the AI response above. If it&apos;s appropriate, click
+                  &quot;Approve&quot; to show it to the user.
+                </p>
+              )}
             </div>
 
             {/* Llama Auditor Report */}
