@@ -313,6 +313,16 @@ export const chatRouter = router({
         });
       }
 
+      // Get all messages with safety scores for this chat
+      const messages = await prisma.message.findMany({
+        where: { chatId: input.chatId },
+        select: {
+          safetyScore: true,
+          accuracyScore: true,
+          semanticAnalysis: true,
+        },
+      });
+
       // Get all anomaly logs for this chat
       const anomalyLogs = await prisma.anomalyLog.findMany({
         where: { chatId: input.chatId },
@@ -324,16 +334,94 @@ export const chatRouter = router({
           layer: true,
           createdAt: true,
           detectionDetails: true,
+          safetyScore: true,
+          accuracyScore: true,
+          userEmotion: true,
         },
       });
 
+      // Calculate average safety score from all messages
+      const safetyScores = messages
+        .map(m => m.safetyScore)
+        .filter((s): s is number => s !== null);
+      const avgSafetyScore =
+        safetyScores.length > 0
+          ? Math.round(
+              safetyScores.reduce((a, b) => a + b, 0) / safetyScores.length,
+            )
+          : 100;
+
+      // Calculate average accuracy score only from messages with Layer 2 analysis
+      // (messages where semanticAnalysis is not null had Layer 2 run)
+      const accuracyScores = messages
+        .filter(m => m.semanticAnalysis !== null && m.accuracyScore !== null)
+        .map(m => m.accuracyScore as number);
+      const avgAccuracyScore =
+        accuracyScores.length > 0
+          ? Math.round(
+              accuracyScores.reduce((a, b) => a + b, 0) / accuracyScores.length,
+            )
+          : 100;
+
+      // Calculate predominant emotion from anomaly logs
+      const emotionCounts: Record<string, number> = {};
+      const intensityCounts: Record<string, number> = {
+        low: 0,
+        medium: 0,
+        high: 0,
+      };
+
+      for (const log of anomalyLogs) {
+        // Count emotions
+        const emotion = log.userEmotion || 'Neutral';
+        emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
+
+        // Count emotion intensities
+        const details = log.detectionDetails as {
+          emotionIntensity?: 'low' | 'medium' | 'high';
+        } | null;
+        const intensity = details?.emotionIntensity || 'low';
+        intensityCounts[intensity]++;
+      }
+
+      // Find the most common emotion
+      let predominantEmotion = 'Neutral';
+      let maxCount = 0;
+      for (const [emotion, count] of Object.entries(emotionCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          predominantEmotion = emotion;
+        }
+      }
+
+      // Find the most common intensity
+      let predominantIntensity: 'low' | 'medium' | 'high' = 'low';
+      if (
+        intensityCounts.high > intensityCounts.medium &&
+        intensityCounts.high > intensityCounts.low
+      ) {
+        predominantIntensity = 'high';
+      } else if (intensityCounts.medium > intensityCounts.low) {
+        predominantIntensity = 'medium';
+      }
+
+      // Determine the current layer (semantic if any Layer 2 analysis exists)
+      const hasSemanticAnalysis = anomalyLogs.some(
+        log => log.layer === 'semantic',
+      );
+      const currentLayer = hasSemanticAnalysis ? 'semantic' : 'deterministic';
+
       // Transform to the format expected by TransparencyPanel
-      return anomalyLogs.map(log => {
+      const logs = anomalyLogs.map(log => {
         // Extract the descriptive message from detectionDetails
         const details = log.detectionDetails as {
-          anomalies?: Array<{ message?: string; type?: string; subType?: string }>;
+          anomalies?: Array<{
+            message?: string;
+            type?: string;
+            subType?: string;
+          }>;
         } | null;
-        
+
         // Get the first anomaly's message for display
         const primaryAnomaly = details?.anomalies?.[0];
         const displayMessage = primaryAnomaly?.message || log.anomalyType;
@@ -350,5 +438,38 @@ export const chatRouter = router({
           layer: log.layer as 'deterministic' | 'semantic',
         };
       });
+
+      // Prepare detection history for client-side cumulative calculations
+      const emotionsHistory = anomalyLogs.map(log => {
+        const details = log.detectionDetails as {
+          emotionIntensity?: 'low' | 'medium' | 'high';
+        } | null;
+        return {
+          emotion: log.userEmotion || 'Neutral',
+          intensity: (details?.emotionIntensity || 'low') as
+            | 'low'
+            | 'medium'
+            | 'high',
+        };
+      });
+
+      return {
+        logs,
+        // Return aggregated panel state for the whole chat
+        // Always return panel state - use calculated values if available, defaults otherwise
+        panelState: {
+          safetyScore: avgSafetyScore,
+          accuracyScore: avgAccuracyScore,
+          userEmotion: predominantEmotion,
+          emotionIntensity: predominantIntensity,
+          layer: currentLayer as 'deterministic' | 'semantic',
+        },
+        // Return raw detection history for client-side cumulative calculations
+        detectionHistory: {
+          safetyScores,
+          accuracyScores,
+          emotions: emotionsHistory,
+        },
+      };
     }),
 });

@@ -130,7 +130,7 @@ export default function ChatDetailPage() {
 
   // Transparency panel state
   const [safetyScore, setSafetyScore] = useState(100);
-  const [accuracyScore, setAccuracyScore] = useState(98);
+  const [accuracyScore, setAccuracyScore] = useState(100);
   const [userEmotion, setUserEmotion] = useState('Neutral');
   const [emotionIntensity, setEmotionIntensity] = useState<
     'low' | 'medium' | 'high'
@@ -140,6 +140,75 @@ export default function ChatDetailPage() {
   const [currentLayer, setCurrentLayer] = useState<
     'deterministic' | 'semantic'
   >('deterministic');
+
+  // Track all detection history for cumulative calculations
+  const [detectionHistory, setDetectionHistory] = useState<{
+    safetyScores: number[];
+    accuracyScores: number[];
+    emotions: { emotion: string; intensity: 'low' | 'medium' | 'high' }[];
+  }>({ safetyScores: [], accuracyScores: [], emotions: [] });
+
+  // Helper function to calculate and update cumulative panel state from history
+  const recalculatePanelState = (history: {
+    safetyScores: number[];
+    accuracyScores: number[];
+    emotions: { emotion: string; intensity: 'low' | 'medium' | 'high' }[];
+  }) => {
+    // Calculate average safety score
+    if (history.safetyScores.length > 0) {
+      const avgSafety = Math.round(
+        history.safetyScores.reduce((a, b) => a + b, 0) /
+          history.safetyScores.length,
+      );
+      setSafetyScore(avgSafety);
+    }
+
+    // Calculate average accuracy score
+    if (history.accuracyScores.length > 0) {
+      const avgAccuracy = Math.round(
+        history.accuracyScores.reduce((a, b) => a + b, 0) /
+          history.accuracyScores.length,
+      );
+      setAccuracyScore(avgAccuracy);
+    }
+
+    // Calculate predominant emotion
+    if (history.emotions.length > 0) {
+      const emotionCounts: Record<string, number> = {};
+      const intensityCounts: Record<string, number> = {
+        low: 0,
+        medium: 0,
+        high: 0,
+      };
+
+      for (const e of history.emotions) {
+        emotionCounts[e.emotion] = (emotionCounts[e.emotion] || 0) + 1;
+        intensityCounts[e.intensity]++;
+      }
+
+      let predominantEmotion = 'Neutral';
+      let maxCount = 0;
+      for (const [emotion, count] of Object.entries(emotionCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          predominantEmotion = emotion;
+        }
+      }
+      setUserEmotion(predominantEmotion);
+
+      // Find predominant intensity
+      if (
+        intensityCounts.high > intensityCounts.medium &&
+        intensityCounts.high > intensityCounts.low
+      ) {
+        setEmotionIntensity('high');
+      } else if (intensityCounts.medium > intensityCounts.low) {
+        setEmotionIntensity('medium');
+      } else {
+        setEmotionIntensity('low');
+      }
+    }
+  };
 
   const utils = trpc.useUtils();
 
@@ -152,7 +221,7 @@ export default function ChatDetailPage() {
   );
 
   // Fetch persisted anomaly logs for this chat
-  const { data: persistedAnomalyLogs } = trpc.chat.getAnomalyLogs.useQuery(
+  const { data: persistedAnomalyData } = trpc.chat.getAnomalyLogs.useQuery(
     { chatId },
     {
       enabled: !!chatId && !!session,
@@ -160,12 +229,36 @@ export default function ChatDetailPage() {
     },
   );
 
-  // Load persisted anomaly logs when data is fetched
+  // Load persisted anomaly logs and panel state when data is fetched
   useEffect(() => {
-    if (persistedAnomalyLogs && persistedAnomalyLogs.length > 0) {
-      setAnomalyLogs(persistedAnomalyLogs);
+    if (persistedAnomalyData) {
+      // Restore anomaly logs
+      if (persistedAnomalyData.logs && persistedAnomalyData.logs.length > 0) {
+        setAnomalyLogs(persistedAnomalyData.logs);
+      }
+
+      // Restore panel state (safety score, emotion, accuracy)
+      if (persistedAnomalyData.panelState) {
+        const {
+          safetyScore: savedSafetyScore,
+          accuracyScore: savedAccuracyScore,
+          userEmotion: savedUserEmotion,
+          emotionIntensity: savedEmotionIntensity,
+          layer,
+        } = persistedAnomalyData.panelState;
+        setSafetyScore(savedSafetyScore);
+        setAccuracyScore(savedAccuracyScore);
+        setUserEmotion(savedUserEmotion);
+        setEmotionIntensity(savedEmotionIntensity);
+        setCurrentLayer(layer);
+      }
+
+      // Restore detection history for cumulative calculations
+      if (persistedAnomalyData.detectionHistory) {
+        setDetectionHistory(persistedAnomalyData.detectionHistory);
+      }
     }
-  }, [persistedAnomalyLogs]);
+  }, [persistedAnomalyData]);
 
   // Update messages when chat data loads
   useEffect(() => {
@@ -275,9 +368,26 @@ export default function ChatDetailPage() {
           const detection = data.detection as DetectionResult;
           setCurrentDetection(detection);
 
-          // Update transparency panel
-          setSafetyScore(detection.safetyScore);
-          setUserEmotion(detection.userEmotion);
+          // Add safety score and emotion to history (blocked messages always have anomalies)
+          setDetectionHistory(prev => {
+            const updatedHistory = {
+              safetyScores: [...prev.safetyScores, detection.safetyScore],
+              accuracyScores:
+                detection.accuracyScore !== undefined
+                  ? [...prev.accuracyScores, detection.accuracyScore]
+                  : prev.accuracyScores,
+              emotions: [
+                ...prev.emotions,
+                {
+                  emotion: detection.userEmotion,
+                  intensity: detection.emotionIntensity || 'low',
+                },
+              ],
+            };
+            recalculatePanelState(updatedHistory);
+            return updatedHistory;
+          });
+          setCurrentLayer(detection.layer || 'deterministic');
 
           // Add to anomaly logs
           if (detection.anomalies.length > 0) {
@@ -356,14 +466,38 @@ export default function ChatDetailPage() {
                   setCurrentDetection(detection);
                   setIsAnalyzing(false);
 
-                  // Update transparency panel with real detection data
-                  setSafetyScore(detection.safetyScore);
-                  setUserEmotion(detection.userEmotion);
-                  setEmotionIntensity(detection.emotionIntensity || 'low');
-                  setCurrentLayer(detection.layer || 'deterministic');
-                  if (detection.accuracyScore !== undefined) {
-                    setAccuracyScore(detection.accuracyScore);
+                  // Always add safety score to history (all messages have safety scores)
+                  setDetectionHistory(prev => {
+                    const updatedHistory = {
+                      ...prev,
+                      safetyScores: [
+                        ...prev.safetyScores,
+                        detection.safetyScore,
+                      ],
+                    };
+                    recalculatePanelState(updatedHistory);
+                    return updatedHistory;
+                  });
+
+                  // Only add emotion to history if there are anomalies (to match server-side data)
+                  if (detection.anomalies.length > 0) {
+                    setDetectionHistory(prev => {
+                      const updatedHistory = {
+                        ...prev,
+                        emotions: [
+                          ...prev.emotions,
+                          {
+                            emotion: detection.userEmotion,
+                            intensity: detection.emotionIntensity || 'low',
+                          },
+                        ],
+                      };
+                      recalculatePanelState(updatedHistory);
+                      return updatedHistory;
+                    });
                   }
+
+                  setCurrentLayer(detection.layer || 'deterministic');
 
                   // Add anomalies to log
                   if (detection.anomalies.length > 0) {
@@ -389,17 +523,19 @@ export default function ChatDetailPage() {
                   setSemanticAnalysis(semantic);
                   setCurrentLayer('semantic');
 
-                  // Update accuracy score from Layer 2
+                  // Update accuracy score from Layer 2 (don't add duplicate safety/emotion)
                   if (semantic.accuracyScore !== undefined) {
-                    setAccuracyScore(semantic.accuracyScore);
-                  }
-
-                  // Update emotion from Layer 2 if available
-                  if (semantic.userEmotion) {
-                    setUserEmotion(semantic.userEmotion);
-                  }
-                  if (semantic.emotionIntensity) {
-                    setEmotionIntensity(semantic.emotionIntensity);
+                    setDetectionHistory(prev => {
+                      const updatedHistory = {
+                        ...prev,
+                        accuracyScores: [
+                          ...prev.accuracyScores,
+                          semantic.accuracyScore!,
+                        ],
+                      };
+                      recalculatePanelState(updatedHistory);
+                      return updatedHistory;
+                    });
                   }
                 } else if (data.retry) {
                   // Show retry notification
