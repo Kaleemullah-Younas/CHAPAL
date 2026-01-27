@@ -47,17 +47,20 @@ export function Navbar() {
 
           {/* Navigation Links - Centered */}
           <div className="hidden md:flex items-center gap-0.5">
-            {['Features', 'How it Works', 'Detection'].map(item => (
-              <motion.a
-                key={item}
-                href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
-                className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-primary rounded-lg transition-all duration-300 hover:bg-primary/5"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                {item}
-              </motion.a>
-            ))}
+            {['Features', 'How it Works', 'Detection', 'Docs'].map(item => {
+              const href = item === 'Docs' ? '/docs' : `#${item.toLowerCase().replace(/\s+/g, '-')}`;
+              return (
+                <motion.a
+                  key={item}
+                  href={href}
+                  className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-primary rounded-lg transition-all duration-300 hover:bg-primary/5"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {item}
+                </motion.a>
+              );
+            })}
           </div>
 
           {/* Auth Actions */}
