@@ -768,21 +768,13 @@ function FooterSection() {
           {/* Logo and description */}
           <div className="md:col-span-2">
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-accent"
-              >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-                <path d="m9 12 2 2 4-4" />
-              </svg>
+              <img
+                src="/logo.svg"
+                alt="CHAPAL Logo"
+                width={32}
+                height={32}
+                className="drop-shadow-sm"
+              />
               <span className="text-xl font-bold text-white">CHAPAL</span>
             </Link>
             <p className="text-white/60 max-w-sm leading-relaxed">
@@ -827,24 +819,10 @@ function FooterSection() {
         </div>
 
         {/* Bottom bar */}
-        <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="pt-8 border-t border-white/10 flex items-center justify-center">
           <p className="text-sm text-white/50">
             © 2026 CHAPAL. All rights reserved.
           </p>
-          <div className="flex items-center gap-2 text-sm text-white/50">
-            <span>Built with</span>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="text-red-400"
-            >
-              <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-            </svg>
-            <span>for AI Safety</span>
-          </div>
         </div>
       </div>
     </footer>
