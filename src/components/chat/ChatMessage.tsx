@@ -26,6 +26,9 @@ interface Message {
   pendingMessage?: string;
   isAdminCorrected?: boolean;
   correctedAt?: Date | string;
+  // Human Review states
+  humanReviewStatus?: 'approved' | 'blocked' | 'admin_response' | null;
+  humanReviewResponse?: string | null;
 }
 
 interface ChatMessageProps {
@@ -67,7 +70,8 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
             </span>
           </div>
           <p className="text-rose-800 font-medium">
-            {message.blockMessage ||
+            {message.content ||
+              message.blockMessage ||
               'Message Blocked. Security protocols triggered. This incident has been logged for Admin review.'}
           </p>
         </div>
@@ -87,8 +91,160 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
     );
   }
 
-  // Admin Corrected message (Layer 2 - After review)
-  if (message.isAdminCorrected && message.role === 'assistant') {
+  // Human Review - Approved by Admin
+  if (
+    message.humanReviewStatus === 'approved' &&
+    message.role === 'assistant'
+  ) {
+    return (
+      <div className="flex gap-4 p-4 bg-emerald-50 dark:bg-emerald-950/30 border-l-4 border-emerald-500">
+        {/* Approved Icon */}
+        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-500/20 text-emerald-600">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-semibold px-2 py-1 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-full">
+              ✅ Approved by Admin
+            </span>
+            {message.correctedAt && (
+              <span className="text-xs text-muted-foreground">
+                {new Date(message.correctedAt).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-foreground">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Human Review - Blocked by Admin
+  if (message.humanReviewStatus === 'blocked' && message.role === 'assistant') {
+    return (
+      <div className="flex gap-4 p-4 bg-rose-50 dark:bg-rose-950/30 border-l-4 border-rose-500">
+        {/* Blocked Icon */}
+        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-rose-500/20 text-rose-600">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+          </svg>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-semibold px-2 py-1 bg-rose-500/20 text-rose-700 dark:text-rose-300 rounded-full">
+              🚫 Admin has blocked this response
+            </span>
+            {message.correctedAt && (
+              <span className="text-xs text-muted-foreground">
+                {new Date(message.correctedAt).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <p className="text-rose-800 dark:text-rose-200">
+            This AI response was reviewed and blocked by an administrator as it
+            may contain inaccurate or harmful information.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Human Review - Admin Response (explicit status or isAdminCorrected for new messages)
+  // This handles admin-created assistant messages (role: assistant, isAdminCorrected: true)
+  // Only show for assistant messages - user messages should display normally
+  if (
+    (message.humanReviewStatus === 'admin_response' ||
+      message.isAdminCorrected) &&
+    message.role === 'assistant'
+  ) {
+    return (
+      <div className="flex gap-4 p-4 bg-muted/30">
+        {/* Admin Avatar */}
+        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-md">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="M4.93 4.93l1.41 1.41" />
+            <path d="M17.66 17.66l1.41 1.41" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+            <path d="M6.34 17.66l-1.41 1.41" />
+            <path d="M19.07 4.93l-1.41 1.41" />
+          </svg>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-medium text-foreground">Admin</span>
+            <span className="text-xs px-1.5 py-0.5 bg-violet-500 text-white rounded font-medium">
+              Human Response
+            </span>
+            {message.correctedAt && (
+              <span className="text-xs text-muted-foreground">
+                · {new Date(message.correctedAt).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-foreground">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Human Review - Approved (Layer 2 - AI response verified by admin)
+  // This is for messages that were approved (not a custom admin response)
+  if (
+    message.humanReviewStatus === 'approved' &&
+    message.role === 'assistant'
+  ) {
     return (
       <div className="flex gap-4 p-4 bg-blue-50 dark:bg-blue-950/30 border-l-4 border-blue-500">
         {/* Verified Icon */}
@@ -113,7 +269,7 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
         <div className="flex-1 overflow-hidden">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-semibold px-2 py-1 bg-blue-500/20 text-blue-700 dark:text-blue-300 rounded-full">
-              ✓ Human Verified
+              ✓ Approved by Admin
             </span>
             {message.correctedAt && (
               <span className="text-xs text-muted-foreground">

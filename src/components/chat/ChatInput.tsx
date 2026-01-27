@@ -12,19 +12,31 @@ interface ChatInputProps {
   onSend: (message: string, attachments: Attachment[]) => void;
   isLoading?: boolean;
   disabled?: boolean;
+  // Human Review blocking
+  isHumanReviewBlocked?: boolean;
+  humanReviewMessage?: string;
 }
 
-export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  isLoading,
+  disabled,
+  isHumanReviewBlocked,
+  humanReviewMessage,
+}: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Check if input should be blocked
+  const isBlocked = disabled || isHumanReviewBlocked;
+
   const handleSubmit = () => {
     if (
       (!message.trim() && attachments.length === 0) ||
       isLoading ||
-      disabled
+      isBlocked
     ) {
       return;
     }
@@ -82,6 +94,45 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
   };
+
+  // Show blocking message if chat is blocked for human review
+  if (isHumanReviewBlocked) {
+    return (
+      <div className="border-t border-border bg-amber-50 dark:bg-amber-950/30 p-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-500/20 text-amber-600">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 8v4" />
+              <path d="M12 16h.01" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              Chat Awaiting Human Review
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+              {humanReviewMessage ||
+                "This conversation requires expert review. You will be notified when it's ready."}
+            </p>
+          </div>
+          <div className="flex-shrink-0">
+            <div className="w-6 h-6 animate-spin rounded-full border-2 border-amber-500 border-t-transparent"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="border-t border-border bg-background p-4">
@@ -159,7 +210,7 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
         {/* Attach Button */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={isLoading || disabled}
+          disabled={isLoading || isBlocked}
           className="p-2.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50"
           title="Attach file"
         >
@@ -189,7 +240,7 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
             }}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
-            disabled={isLoading || disabled}
+            disabled={isLoading || isBlocked}
             rows={1}
             className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 max-h-[200px]"
           />
@@ -201,7 +252,7 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
           disabled={
             (!message.trim() && attachments.length === 0) ||
             isLoading ||
-            disabled
+            isBlocked
           }
           className="p-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >

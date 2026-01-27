@@ -12,7 +12,13 @@ import {
   PendingReviewMessage,
 } from '@/components/chat';
 import type { ThinkingStage } from '@/components/chat';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  getPusherClient,
+  getChatChannelName,
+  PUSHER_EVENTS,
+  type AdminResponseEvent,
+} from '@/lib/pusher-client';
 
 interface Attachment {
   file: File;
@@ -48,6 +54,11 @@ interface Message {
   blockMessage?: string;
   warningType?: string;
   pendingMessage?: string;
+  // Human Review states
+  humanReviewStatus?: 'approved' | 'blocked' | 'admin_response' | null;
+  humanReviewResponse?: string | null;
+  isAdminCorrected?: boolean;
+  correctedAt?: Date | string;
 }
 
 interface AnomalyLog {
@@ -130,7 +141,7 @@ export default function ChatDetailPage() {
 
   // Transparency panel state
   const [safetyScore, setSafetyScore] = useState(100);
-  const [accuracyScore, setAccuracyScore] = useState(98);
+  const [accuracyScore, setAccuracyScore] = useState(100);
   const [userEmotion, setUserEmotion] = useState('Neutral');
   const [emotionIntensity, setEmotionIntensity] = useState<
     'low' | 'medium' | 'high'
@@ -140,6 +151,75 @@ export default function ChatDetailPage() {
   const [currentLayer, setCurrentLayer] = useState<
     'deterministic' | 'semantic'
   >('deterministic');
+
+  // Track all detection history for cumulative calculations
+  const [detectionHistory, setDetectionHistory] = useState<{
+    safetyScores: number[];
+    accuracyScores: number[];
+    emotions: { emotion: string; intensity: 'low' | 'medium' | 'high' }[];
+  }>({ safetyScores: [], accuracyScores: [], emotions: [] });
+
+  // Helper function to calculate and update cumulative panel state from history
+  const recalculatePanelState = (history: {
+    safetyScores: number[];
+    accuracyScores: number[];
+    emotions: { emotion: string; intensity: 'low' | 'medium' | 'high' }[];
+  }) => {
+    // Calculate average safety score
+    if (history.safetyScores.length > 0) {
+      const avgSafety = Math.round(
+        history.safetyScores.reduce((a, b) => a + b, 0) /
+          history.safetyScores.length,
+      );
+      setSafetyScore(avgSafety);
+    }
+
+    // Calculate average accuracy score
+    if (history.accuracyScores.length > 0) {
+      const avgAccuracy = Math.round(
+        history.accuracyScores.reduce((a, b) => a + b, 0) /
+          history.accuracyScores.length,
+      );
+      setAccuracyScore(avgAccuracy);
+    }
+
+    // Calculate predominant emotion
+    if (history.emotions.length > 0) {
+      const emotionCounts: Record<string, number> = {};
+      const intensityCounts: Record<string, number> = {
+        low: 0,
+        medium: 0,
+        high: 0,
+      };
+
+      for (const e of history.emotions) {
+        emotionCounts[e.emotion] = (emotionCounts[e.emotion] || 0) + 1;
+        intensityCounts[e.intensity]++;
+      }
+
+      let predominantEmotion = 'Neutral';
+      let maxCount = 0;
+      for (const [emotion, count] of Object.entries(emotionCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          predominantEmotion = emotion;
+        }
+      }
+      setUserEmotion(predominantEmotion);
+
+      // Find predominant intensity
+      if (
+        intensityCounts.high > intensityCounts.medium &&
+        intensityCounts.high > intensityCounts.low
+      ) {
+        setEmotionIntensity('high');
+      } else if (intensityCounts.medium > intensityCounts.low) {
+        setEmotionIntensity('medium');
+      } else {
+        setEmotionIntensity('low');
+      }
+    }
+  };
 
   const utils = trpc.useUtils();
 
@@ -151,16 +231,80 @@ export default function ChatDetailPage() {
     },
   );
 
+  // Fetch persisted anomaly logs for this chat
+  const { data: persistedAnomalyData } = trpc.chat.getAnomalyLogs.useQuery(
+    { chatId },
+    {
+      enabled: !!chatId && !!session,
+      refetchOnWindowFocus: false,
+    },
+  );
+
+  // Load persisted anomaly logs and panel state when data is fetched
+  useEffect(() => {
+    if (persistedAnomalyData) {
+      // Restore anomaly logs
+      if (persistedAnomalyData.logs && persistedAnomalyData.logs.length > 0) {
+        setAnomalyLogs(persistedAnomalyData.logs);
+      }
+
+      // Restore panel state (safety score, emotion, accuracy)
+      if (persistedAnomalyData.panelState) {
+        const {
+          safetyScore: savedSafetyScore,
+          accuracyScore: savedAccuracyScore,
+          userEmotion: savedUserEmotion,
+          emotionIntensity: savedEmotionIntensity,
+          layer,
+        } = persistedAnomalyData.panelState;
+        setSafetyScore(savedSafetyScore);
+        setAccuracyScore(savedAccuracyScore);
+        setUserEmotion(savedUserEmotion);
+        setEmotionIntensity(savedEmotionIntensity);
+        setCurrentLayer(layer);
+      }
+
+      // Restore detection history for cumulative calculations
+      if (persistedAnomalyData.detectionHistory) {
+        setDetectionHistory(persistedAnomalyData.detectionHistory);
+      }
+    }
+  }, [persistedAnomalyData]);
+
   // Update messages when chat data loads
   useEffect(() => {
     if (chat?.messages) {
-      setMessages(
-        chat.messages.map(m => {
+      setMessages(prev => {
+        // Only preserve local blocked messages if chat is still blocked
+        // If admin has responded (isHumanReviewBlocked is false), remove local blocked messages
+        const localBlockedMessages = chat.isHumanReviewBlocked
+          ? prev.filter(
+              m =>
+                m.isBlocked &&
+                m.role === 'assistant' &&
+                m.id.startsWith('blocked-'),
+            )
+          : []; // Don't keep blocked messages if chat is unblocked
+
+        const dbMessages = chat.messages.map(m => {
           // Safely cast attachments from Prisma Json type
           const atts = m.attachments as unknown;
           const typedAttachments = Array.isArray(atts)
             ? (atts as MessageAttachment[])
             : null;
+
+          // Determine human review status based on chat state
+          let humanReviewStatus:
+            | 'approved'
+            | 'blocked'
+            | 'admin_response'
+            | null = null;
+          if (chat.humanReviewStatus && chat.humanReviewMessageId === m.id) {
+            humanReviewStatus = chat.humanReviewStatus as
+              | 'approved'
+              | 'blocked'
+              | 'admin_response';
+          }
 
           return {
             id: m.id,
@@ -168,9 +312,18 @@ export default function ChatDetailPage() {
             content: m.content,
             attachments: typedAttachments,
             createdAt: new Date(m.createdAt),
+            isBlocked: m.isBlocked,
+            isWarning: m.isWarning,
+            isPendingReview: m.isPendingReview,
+            isAdminCorrected: m.isAdminCorrected,
+            correctedAt: m.correctedAt ?? undefined,
+            humanReviewStatus,
           };
-        }),
-      );
+        });
+
+        // Append local blocked messages to DB messages
+        return [...dbMessages, ...localBlockedMessages];
+      });
     }
   }, [chat]);
 
@@ -178,6 +331,48 @@ export default function ChatDetailPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
+
+  // Subscribe to Pusher for real-time admin response updates
+  useEffect(() => {
+    if (!chatId) return;
+
+    const pusher = getPusherClient();
+    const channelName = getChatChannelName(chatId);
+
+    console.log(`[Pusher Client] Subscribing to channel: ${channelName}`);
+
+    const channel = pusher.subscribe(channelName);
+
+    // Log connection state
+    channel.bind('pusher:subscription_succeeded', () => {
+      console.log(`[Pusher Client] Successfully subscribed to ${channelName}`);
+    });
+
+    channel.bind('pusher:subscription_error', (error: unknown) => {
+      console.error(
+        `[Pusher Client] Subscription error for ${channelName}:`,
+        error,
+      );
+    });
+
+    // Handle admin response event - refetch chat data
+    const handleAdminResponse = (data: AdminResponseEvent) => {
+      console.log('[Pusher Client] Received admin response event:', data);
+      // Refetch the chat data to get the updated messages
+      utils.chat.getChatById.invalidate({ chatId });
+    };
+
+    channel.bind(PUSHER_EVENTS.ADMIN_RESPONSE, handleAdminResponse);
+
+    // Cleanup on unmount
+    return () => {
+      console.log(`[Pusher Client] Unsubscribing from channel: ${channelName}`);
+      channel.unbind(PUSHER_EVENTS.ADMIN_RESPONSE, handleAdminResponse);
+      channel.unbind('pusher:subscription_succeeded');
+      channel.unbind('pusher:subscription_error');
+      pusher.unsubscribe(channelName);
+    };
+  }, [chatId, utils.chat.getChatById]);
 
   const uploadFile = async (
     file: File,
@@ -259,9 +454,26 @@ export default function ChatDetailPage() {
           const detection = data.detection as DetectionResult;
           setCurrentDetection(detection);
 
-          // Update transparency panel
-          setSafetyScore(detection.safetyScore);
-          setUserEmotion(detection.userEmotion);
+          // Add safety score and emotion to history (blocked messages always have anomalies)
+          setDetectionHistory(prev => {
+            const updatedHistory = {
+              safetyScores: [...prev.safetyScores, detection.safetyScore],
+              accuracyScores:
+                detection.accuracyScore !== undefined
+                  ? [...prev.accuracyScores, detection.accuracyScore]
+                  : prev.accuracyScores,
+              emotions: [
+                ...prev.emotions,
+                {
+                  emotion: detection.userEmotion,
+                  intensity: detection.emotionIntensity || 'low',
+                },
+              ],
+            };
+            recalculatePanelState(updatedHistory);
+            return updatedHistory;
+          });
+          setCurrentLayer(detection.layer || 'deterministic');
 
           // Add to anomaly logs
           if (detection.anomalies.length > 0) {
@@ -297,9 +509,13 @@ export default function ChatDetailPage() {
           setIsStreaming(false);
           setThinkingStage(null);
 
-          // Refresh chat data
+          // If chat is blocked (safety issue), invalidate chat data to get updated isHumanReviewBlocked status
+          if (data.chatBlocked) {
+            utils.chat.getChatById.invalidate({ chatId });
+          }
+
+          // Refresh sidebar chat list
           utils.chat.getChats.invalidate();
-          utils.chat.getChatById.invalidate({ chatId });
           return;
         }
       }
@@ -340,14 +556,27 @@ export default function ChatDetailPage() {
                   setCurrentDetection(detection);
                   setIsAnalyzing(false);
 
-                  // Update transparency panel with real detection data
-                  setSafetyScore(detection.safetyScore);
-                  setUserEmotion(detection.userEmotion);
-                  setEmotionIntensity(detection.emotionIntensity || 'low');
+                  // Always add safety score and emotion to history (for cumulative chat analysis)
+                  setDetectionHistory(prev => {
+                    const updatedHistory = {
+                      safetyScores: [
+                        ...prev.safetyScores,
+                        detection.safetyScore,
+                      ],
+                      accuracyScores: prev.accuracyScores,
+                      emotions: [
+                        ...prev.emotions,
+                        {
+                          emotion: detection.userEmotion,
+                          intensity: detection.emotionIntensity || 'low',
+                        },
+                      ],
+                    };
+                    recalculatePanelState(updatedHistory);
+                    return updatedHistory;
+                  });
+
                   setCurrentLayer(detection.layer || 'deterministic');
-                  if (detection.accuracyScore !== undefined) {
-                    setAccuracyScore(detection.accuracyScore);
-                  }
 
                   // Add anomalies to log
                   if (detection.anomalies.length > 0) {
@@ -373,17 +602,19 @@ export default function ChatDetailPage() {
                   setSemanticAnalysis(semantic);
                   setCurrentLayer('semantic');
 
-                  // Update accuracy score from Layer 2
+                  // Update accuracy score from Layer 2 (don't add duplicate safety/emotion)
                   if (semantic.accuracyScore !== undefined) {
-                    setAccuracyScore(semantic.accuracyScore);
-                  }
-
-                  // Update emotion from Layer 2 if available
-                  if (semantic.userEmotion) {
-                    setUserEmotion(semantic.userEmotion);
-                  }
-                  if (semantic.emotionIntensity) {
-                    setEmotionIntensity(semantic.emotionIntensity);
+                    setDetectionHistory(prev => {
+                      const updatedHistory = {
+                        ...prev,
+                        accuracyScores: [
+                          ...prev.accuracyScores,
+                          semantic.accuracyScore!,
+                        ],
+                      };
+                      recalculatePanelState(updatedHistory);
+                      return updatedHistory;
+                    });
                   }
                 } else if (data.retry) {
                   // Show retry notification
@@ -639,6 +870,8 @@ export default function ChatDetailPage() {
           onSend={handleSend}
           isLoading={isStreaming || isUploading}
           disabled={isStreaming || isUploading}
+          isHumanReviewBlocked={chat?.isHumanReviewBlocked}
+          humanReviewMessage={chat?.humanReviewMessage || undefined}
         />
       </div>
 

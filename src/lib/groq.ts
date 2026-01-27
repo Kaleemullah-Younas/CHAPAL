@@ -25,6 +25,11 @@ export interface SemanticAnalysisResult {
   accuracyScore: number; // 0-100
   accuracyNotes: string | null;
 
+  // PII Detection (Semantic/Contextual)
+  isPII: boolean;
+  piiConfidence: number;
+  piiType: string | null;
+
   // Context detection
   isMedicalAdvice: boolean;
   isPsychological: boolean;
@@ -59,6 +64,7 @@ IMPORTANT RULES:
 3. For CONTEXT DETECTION:
    - Medical advice: User asking for diagnosis, treatment, medication dosage, symptoms interpretation
    - Psychological: User expressing emotional distress, seeking mental health guidance, crisis indicators
+   - PII: User sharing personal information not caught by standard regex (e.g. "my address is [text]", "my id is [unstructured number]", "my phone number is [words]")
    
 4. For EMOTION DETECTION:
    - Identify the user's emotional state from their message
@@ -126,6 +132,9 @@ export async function analyzeWithGroq(
       hallucinationReason: null,
       accuracyScore: 85,
       accuracyNotes: 'Unable to analyze - Groq API error',
+      isPII: false,
+      piiConfidence: 0,
+      piiType: null,
       isMedicalAdvice: false,
       isPsychological: false,
       contextType: null,

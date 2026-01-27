@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSession } from '@/lib/auth-client';
 import { UserDropdown } from '@/components/UserDropdown';
+import { NotificationBell } from '@/components/NotificationBell';
 
 export function Header() {
   const { data: session, isPending } = useSession();
@@ -70,6 +71,7 @@ export function Header() {
                 </svg>
                 Chat
               </Link>
+              <NotificationBell />
               <UserDropdown user={session.user} />
             </>
           ) : (

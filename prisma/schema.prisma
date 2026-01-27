@@ -8,14 +8,19 @@ datasource db {
 }
 
 model User {
-  id            String   @id @map("_id")
+  id            String    @id @map("_id")
   name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false)
+  email         String    @unique
+  emailVerified Boolean   @default(false)
   image         String?
-  role          String   @default("user") // "user" or "admin"
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  role          String    @default("user") // "user" or "admin"
+  isBlocked     Boolean   @default(false) // User is completely blocked from the app
+  blockedAt     DateTime? // When the user was blocked
+  blockedBy     String? // Admin who blocked the user
+  blockedReason String? // Reason for blocking
+  warningCount  Int       @default(0) // 0-3 warnings, blocked after 3
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   sessions Session[]
   accounts Account[]
@@ -68,6 +73,17 @@ model Chat {
   messages  Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  // Human Review Blocking (Layer 2)
+  isHumanReviewBlocked Boolean   @default(false) // Chat blocked pending admin review
+  humanReviewReason    String? // "hallucination" | "medical" | "self_harm" | "psychological"
+  humanReviewMessageId String?   @db.ObjectId // The message that triggered the block
+  humanReviewStatus    String? // "pending" | "approved" | "blocked" | "admin_response"
+  humanReviewMessage   String? // User-facing message explaining the block
+  humanReviewAdminId   String? // Admin who reviewed
+  humanReviewResponse  String? // Admin's response content (for admin_response)
+  humanReviewedAt      DateTime?
+  humanReviewLocked    Boolean   @default(false) // Admin can only respond once
 }
 
 model Message {
@@ -80,9 +96,11 @@ model Message {
   createdAt   DateTime @default(now())
 
   // Layer 1 - Anomaly detection fields
-  isBlocked   Boolean @default(false)
-  isWarning   Boolean @default(false)
-  safetyScore Int?
+  isBlocked        Boolean @default(false)
+  isWarning        Boolean @default(false)
+  safetyScore      Int?
+  userEmotion      String? // Detected emotion for cumulative tracking
+  emotionIntensity String? // "low", "medium", "high"
 
   // Layer 2 - Semantic analysis fields
   isPendingReview  Boolean @default(false) // AI response hidden, sent to admin

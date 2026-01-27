@@ -13,6 +13,22 @@ export const auth = betterAuth({
         type: 'string',
         defaultValue: 'user',
       },
+      isBlocked: {
+        type: 'boolean',
+        defaultValue: false,
+      },
+      blockedAt: {
+        type: 'date',
+        required: false,
+      },
+      blockedBy: {
+        type: 'string',
+        required: false,
+      },
+      blockedReason: {
+        type: 'string',
+        required: false,
+      },
     },
   },
   emailAndPassword: {

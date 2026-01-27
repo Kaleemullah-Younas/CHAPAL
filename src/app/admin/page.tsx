@@ -55,6 +55,27 @@ interface SemanticReviewAnomaly {
   } | null;
 }
 
+// Type definition for pending human reviews (blocked chats)
+interface PendingHumanReview {
+  id: string;
+  title: string | null;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  humanReviewReason: string | null;
+  humanReviewMessage: string | null;
+  humanReviewMessageId: string | null;
+  updatedAt: string;
+  messages: {
+    id: string;
+    role: string;
+    content: string;
+    originalContent: string | null;
+    isPendingReview: boolean;
+    createdAt: string;
+  }[];
+}
+
 // Helper to get llama report from detection details
 function getLlamaReport(anomaly: Anomaly) {
   const details = anomaly.detectionDetails as {
@@ -78,6 +99,7 @@ function ReviewModal({
   onApprove,
   onBlock,
   onCorrect,
+  isLoading,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -85,6 +107,7 @@ function ReviewModal({
   onApprove: () => void;
   onBlock: () => void;
   onCorrect: (response: string) => void;
+  isLoading?: boolean;
 }) {
   const [correctedResponse, setCorrectedResponse] = useState('');
   const [activeAction, setActiveAction] = useState<
@@ -93,6 +116,9 @@ function ReviewModal({
 
   if (!isOpen || !anomaly) return null;
 
+  // Check if anomaly has already been reviewed (locked)
+  const isLocked = anomaly.status !== 'pending';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
@@ -100,9 +126,9 @@ function ReviewModal({
         onClick={onClose}
       />
 
-      <div className="relative z-10 w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-primary/10 to-transparent border-b border-border">
+        <div className="flex-shrink-0 px-6 py-4 bg-gradient-to-r from-primary/10 to-transparent border-b border-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -153,278 +179,752 @@ function ReviewModal({
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-0">
-          {/* Left Side: Context */}
-          <div className="p-6 border-r border-border bg-slate-50">
-            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid md:grid-cols-2 gap-0">
+            {/* Left Side: Context */}
+            <div className="p-6 border-r border-border bg-slate-50">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-muted-foreground"
+                >
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                Context (Read Only)
+              </h3>
+
+              {/* User Query */}
+              <div className="mb-4">
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                  User Query
+                </label>
+                <div className="p-3 bg-white rounded-lg border border-border text-sm">
+                  {anomaly.userQuery}
+                </div>
+              </div>
+
+              {/* AI Response */}
+              <div className="mb-4">
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                  {anomaly.aiResponse
+                    ? 'AI Response (Pending Review)'
+                    : 'AI Response (Not Generated)'}
+                </label>
+                <div
+                  className={`p-3 bg-white rounded-lg border text-sm ${anomaly.aiResponse ? 'border-amber-200' : 'border-rose-200'}`}
+                >
+                  {anomaly.aiResponse ||
+                    'Message was blocked before AI could generate a response.'}
+                </div>
+                {anomaly.aiResponse && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Review the AI response above. If it&apos;s appropriate,
+                    click &quot;Approve&quot; to show it to the user.
+                  </p>
+                )}
+              </div>
+
+              {/* Llama Auditor Report */}
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                  AI Auditor Report
+                </label>
+                {(() => {
+                  const report = getLlamaReport(anomaly);
+                  return (
+                    <div className="p-4 bg-white rounded-lg border border-border space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          Violation:
+                        </span>
+                        <span className="text-sm font-medium text-rose-600">
+                          {report.violation}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          Confidence:
+                        </span>
+                        <span className="text-sm font-medium">
+                          {report.confidence}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          Safety Score:
+                        </span>
+                        <span
+                          className={`text-sm font-medium ${anomaly.safetyScore < 50 ? 'text-rose-600' : anomaly.safetyScore < 80 ? 'text-amber-600' : 'text-emerald-600'}`}
+                        >
+                          {anomaly.safetyScore}%
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          User Emotion:
+                        </span>
+                        <span className="text-sm font-medium">
+                          {anomaly.userEmotion}
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t border-border">
+                        <span className="text-sm text-muted-foreground">
+                          Reason:
+                        </span>
+                        <p className="text-sm mt-1">{report.reason}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Right Side: Actions */}
+            <div className="p-6">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-muted-foreground"
+                >
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+                </svg>
+                Intervention Actions
+              </h3>
+
+              {/* Locked State Banner */}
+              {isLocked && (
+                <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-amber-600"
+                      >
+                        <rect
+                          width="18"
+                          height="11"
+                          x="3"
+                          y="11"
+                          rx="2"
+                          ry="2"
+                        />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-medium text-amber-800">
+                        Review Locked
+                      </p>
+                      <p className="text-sm text-amber-600">
+                        This anomaly has already been reviewed ({anomaly.status}
+                        ).
+                        {anomaly.reviewedAt &&
+                          ` Reviewed on ${new Date(anomaly.reviewedAt).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {/* Option A: Approve */}
+                <button
+                  onClick={() => !isLocked && setActiveAction('approve')}
+                  disabled={isLocked}
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${isLocked
+                    ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
+                    : activeAction === 'approve'
+                      ? 'border-emerald-500 bg-emerald-50'
+                      : 'border-border hover:border-emerald-300 hover:bg-emerald-50/50'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-emerald-600"
+                      >
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        Approve (False Positive)
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        This message was actually safe. Unblock chat and show AI
+                        response to user.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Option B: Block User */}
+                <button
+                  onClick={() => !isLocked && setActiveAction('block')}
+                  disabled={isLocked}
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${isLocked
+                    ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
+                    : activeAction === 'block'
+                      ? 'border-rose-500 bg-rose-50'
+                      : 'border-border hover:border-rose-300 hover:bg-rose-50/50'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-rose-600"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="m4.9 4.9 14.2 14.2" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        Block User Account
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Severe violation. Block user from the entire app
+                        permanently.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Option C: Specialist Correction */}
+                <button
+                  onClick={() => !isLocked && setActiveAction('correct')}
+                  disabled={isLocked}
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${isLocked
+                    ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
+                    : activeAction === 'correct'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50 hover:bg-primary/5'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-primary"
+                      >
+                        <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        Specialist Correction
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Rewrite response and send corrected version to user.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Correction Text Area */}
+                {activeAction === 'correct' && (
+                  <div className="mt-4">
+                    <label className="text-sm font-medium text-foreground mb-2 block">
+                      Corrected Response
+                    </label>
+                    <textarea
+                      value={correctedResponse}
+                      onChange={e => setCorrectedResponse(e.target.value)}
+                      placeholder="Write the safe and appropriate response here..."
+                      className="w-full h-32 p-3 rounded-xl border border-border bg-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Submit Button */}
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={onClose}
+                  disabled={isLoading}
+                  className="flex-1 h-11 rounded-xl border border-border font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {isLocked ? 'Close' : 'Cancel'}
+                </button>
+                {!isLocked && (
+                  <button
+                    onClick={() => {
+                      if (activeAction === 'approve') onApprove();
+                      else if (activeAction === 'block') onBlock();
+                      else if (activeAction === 'correct' && correctedResponse)
+                        onCorrect(correctedResponse);
+                    }}
+                    disabled={
+                      isLoading ||
+                      !activeAction ||
+                      (activeAction === 'correct' && !correctedResponse)
+                    }
+                    className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? (
+                      <>
+                        <svg
+                          className="animate-spin h-4 w-4"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        Submitting...
+                      </>
+                    ) : (
+                      'Submit Decision'
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Human Review Action Modal - For blocked chats
+function HumanReviewActionModal({
+  isOpen,
+  onClose,
+  chat,
+  originalAIResponse,
+  onApprove,
+  onBlock,
+  onRespond,
+  isLoading,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  chat: PendingHumanReview | null;
+  originalAIResponse: string;
+  onApprove: () => void;
+  onBlock: () => void;
+  onRespond: (response: string) => void;
+  isLoading?: boolean;
+}) {
+  const [adminResponse, setAdminResponse] = useState('');
+  const [activeAction, setActiveAction] = useState<
+    'approve' | 'block' | 'respond' | null
+  >(null);
+
+  if (!isOpen || !chat) return null;
+
+  // Get reason badge info
+  const reasonBadges: Record<
+    string,
+    { color: string; icon: string; label: string }
+  > = {
+    hallucination: {
+      color: 'bg-purple-100 text-purple-700',
+      icon: '🎭',
+      label: 'Hallucination Risk',
+    },
+    medical: {
+      color: 'bg-rose-100 text-rose-700',
+      icon: '⚕️',
+      label: 'Medical Advice',
+    },
+    self_harm: {
+      color: 'bg-red-100 text-red-700',
+      icon: '💙',
+      label: 'Self-Harm Concern',
+    },
+    psychological: {
+      color: 'bg-violet-100 text-violet-700',
+      icon: '🧠',
+      label: 'Psychological',
+    },
+    pii: {
+      color: 'bg-purple-100 text-purple-700',
+      icon: '🔐',
+      label: 'PII Leak',
+    },
+    prompt_injection: {
+      color: 'bg-rose-100 text-rose-700',
+      icon: '🔓',
+      label: 'Prompt Injection',
+    },
+    safety: {
+      color: 'bg-red-100 text-red-700',
+      icon: '🚨',
+      label: 'Safety Violation',
+    },
+    policy_violation: {
+      color: 'bg-orange-100 text-orange-700',
+      icon: '🚫',
+      label: 'Policy Violation',
+    },
+    sudden_spike: {
+      color: 'bg-yellow-100 text-yellow-700',
+      icon: '⚡',
+      label: 'Sudden Spike',
+    },
+    unknown: {
+      color: 'bg-gray-100 text-gray-700',
+      icon: '❓',
+      label: 'Review Required',
+    },
+  };
+  const reason = chat.humanReviewReason || 'unknown';
+  const badge = reasonBadges[reason] || reasonBadges.unknown;
+
+  // Get the last user message
+  const userMessage = [...chat.messages].reverse().find(m => m.role === 'user');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      <div className="relative z-10 w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 bg-gradient-to-r from-indigo-50 to-transparent border-b border-border flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-indigo-600"
+                >
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Human Review Required
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  User&apos;s chat is blocked until you take action
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-muted rounded-lg transition-colors"
+            >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
+                width="20"
+                height="20"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="text-muted-foreground"
               >
-                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                <circle cx="12" cy="12" r="3" />
+                <path d="M18 6 6 18M6 6l12 12" />
               </svg>
-              Context (Read Only)
+            </button>
+          </div>
+        </div>
+
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* User Info and Reason */}
+          <div className="mb-6 p-4 bg-slate-50 rounded-xl">
+            <div className="flex items-center gap-4 mb-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {chat.userName || 'Unknown User'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {chat.userEmail}
+                </p>
+              </div>
+              <span
+                className={`px-3 py-1 text-sm font-medium rounded-full ${badge.color}`}
+              >
+                {badge.icon} {badge.label}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Chat:{' '}
+              <span className="font-medium text-foreground">
+                {chat.title || 'Untitled Chat'}
+              </span>
+            </p>
+          </div>
+
+          {/* User's Query */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-foreground mb-2">
+              User&apos;s Query
             </h3>
-
-            {/* User Query */}
-            <div className="mb-4">
-              <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                User Query
-              </label>
-              <div className="p-3 bg-white rounded-lg border border-border text-sm">
-                {anomaly.userQuery}
-              </div>
-            </div>
-
-            {/* Blocked AI Response */}
-            <div className="mb-4">
-              <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                {anomaly.aiResponse
-                  ? 'Blocked AI Response'
-                  : 'AI Response (Not Generated)'}
-              </label>
-              <div className="p-3 bg-white rounded-lg border border-rose-200 text-sm">
-                {anomaly.aiResponse ||
-                  'Message was blocked before AI could generate a response.'}
-              </div>
-            </div>
-
-            {/* Llama Auditor Report */}
-            <div>
-              <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                AI Auditor Report
-              </label>
-              {(() => {
-                const report = getLlamaReport(anomaly);
-                return (
-                  <div className="p-4 bg-white rounded-lg border border-border space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        Violation:
-                      </span>
-                      <span className="text-sm font-medium text-rose-600">
-                        {report.violation}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        Confidence:
-                      </span>
-                      <span className="text-sm font-medium">
-                        {report.confidence}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        Safety Score:
-                      </span>
-                      <span
-                        className={`text-sm font-medium ${anomaly.safetyScore < 50 ? 'text-rose-600' : anomaly.safetyScore < 80 ? 'text-amber-600' : 'text-emerald-600'}`}
-                      >
-                        {anomaly.safetyScore}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        User Emotion:
-                      </span>
-                      <span className="text-sm font-medium">
-                        {anomaly.userEmotion}
-                      </span>
-                    </div>
-                    <div className="pt-2 border-t border-border">
-                      <span className="text-sm text-muted-foreground">
-                        Reason:
-                      </span>
-                      <p className="text-sm mt-1">{report.reason}</p>
-                    </div>
-                  </div>
-                );
-              })()}
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+              <p className="text-sm text-foreground whitespace-pre-wrap">
+                {userMessage?.content || 'No query available'}
+              </p>
             </div>
           </div>
 
-          {/* Right Side: Actions */}
-          <div className="p-6">
-            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-muted-foreground"
-              >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-              </svg>
-              Intervention Actions
+          {/* AI Response (Hidden from User) */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+              AI Response
+              <span className="text-xs font-normal px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                Hidden from user
+              </span>
             </h3>
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-sm text-foreground whitespace-pre-wrap">
+                {originalAIResponse || 'No AI response available'}
+              </p>
+            </div>
+          </div>
 
-            <div className="space-y-3">
-              {/* Option A: Approve */}
-              <button
-                onClick={() => setActiveAction('approve')}
-                className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                  activeAction === 'approve'
-                    ? 'border-emerald-500 bg-emerald-50'
-                    : 'border-border hover:border-emerald-300 hover:bg-emerald-50/50'
+          {/* Action Options */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              Choose Your Action
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              ⚠️ Note: Admin can only respond once. This action cannot be
+              changed after submission.
+            </p>
+
+            {/* Option A: Approve AI Response */}
+            <button
+              onClick={() => setActiveAction('approve')}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${activeAction === 'approve'
+                ? 'border-emerald-500 bg-emerald-50'
+                : 'border-border hover:border-emerald-300 hover:bg-emerald-50/50'
                 }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-emerald-600"
-                    >
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                      <polyline points="22 4 12 14.01 9 11.01" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">
-                      Approve (False Positive)
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      This message was actually safe. Unblock and show to user.
-                    </p>
-                  </div>
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-emerald-600"
+                  >
+                    <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                    <path d="m9 12 2 2 4-4" />
+                  </svg>
                 </div>
-              </button>
+                <div>
+                  <p className="font-medium text-foreground">
+                    Approve AI Response
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    The AI response is safe. Show it to the user with
+                    &quot;Approved by Admin&quot; label.
+                  </p>
+                </div>
+              </div>
+            </button>
 
-              {/* Option B: Confirm Block */}
-              <button
-                onClick={() => setActiveAction('block')}
-                className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                  activeAction === 'block'
-                    ? 'border-rose-500 bg-rose-50'
-                    : 'border-border hover:border-rose-300 hover:bg-rose-50/50'
+            {/* Option B: Block User Account */}
+            <button
+              onClick={() => setActiveAction('block')}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${activeAction === 'block'
+                ? 'border-rose-500 bg-rose-50'
+                : 'border-border hover:border-rose-300 hover:bg-rose-50/50'
                 }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-rose-600"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="m4.9 4.9 14.2 14.2" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">Confirm Block</p>
-                    <p className="text-sm text-muted-foreground">
-                      Violation confirmed. Keep blocked permanently.
-                    </p>
-                  </div>
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-rose-600"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="m4.9 4.9 14.2 14.2" />
+                  </svg>
                 </div>
-              </button>
+                <div>
+                  <p className="font-medium text-foreground">
+                    Block User Account
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Severe violation. Block user from the entire app
+                    permanently.
+                  </p>
+                </div>
+              </div>
+            </button>
 
-              {/* Option C: Specialist Correction */}
-              <button
-                onClick={() => setActiveAction('correct')}
-                className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                  activeAction === 'correct'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50 hover:bg-primary/5'
+            {/* Option C: Write Custom Response */}
+            <button
+              onClick={() => setActiveAction('respond')}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${activeAction === 'respond'
+                ? 'border-indigo-500 bg-indigo-50'
+                : 'border-border hover:border-indigo-300 hover:bg-indigo-50/50'
                 }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-primary"
-                    >
-                      <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">
-                      Specialist Correction
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Rewrite response and send corrected version to user.
-                    </p>
-                  </div>
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-indigo-600"
+                  >
+                    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
                 </div>
-              </button>
+                <div>
+                  <p className="font-medium text-foreground">
+                    Write Custom Response
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Provide your own response to the user with &quot;Admin
+                    Response&quot; label.
+                  </p>
+                </div>
+              </div>
+            </button>
 
-              {/* Correction Text Area */}
-              {activeAction === 'correct' && (
-                <div className="mt-4">
-                  <label className="text-sm font-medium text-foreground mb-2 block">
-                    Corrected Response
-                  </label>
-                  <textarea
-                    value={correctedResponse}
-                    onChange={e => setCorrectedResponse(e.target.value)}
-                    placeholder="Write the safe and appropriate response here..."
-                    className="w-full h-32 p-3 rounded-xl border border-border bg-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
+            {/* Custom Response Text Area */}
+            {activeAction === 'respond' && (
+              <div className="mt-4">
+                <label className="text-sm font-medium text-foreground mb-2 block">
+                  Your Response to the User
+                </label>
+                <textarea
+                  value={adminResponse}
+                  onChange={e => setAdminResponse(e.target.value)}
+                  placeholder="Write your response here. Be helpful, accurate, and supportive..."
+                  className="w-full h-40 p-3 rounded-xl border border-border bg-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer - Fixed */}
+        <div className="px-6 py-4 border-t border-border bg-slate-50 flex-shrink-0">
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className="flex-1 h-11 rounded-xl border border-border font-medium text-muted-foreground hover:bg-white transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (activeAction === 'approve') onApprove();
+                else if (activeAction === 'block') onBlock();
+                else if (activeAction === 'respond' && adminResponse.trim())
+                  onRespond(adminResponse.trim());
+              }}
+              disabled={
+                !activeAction ||
+                (activeAction === 'respond' && !adminResponse.trim()) ||
+                isLoading
+              }
+              className="flex-1 h-11 rounded-xl bg-indigo-500 text-white font-medium hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {isLoading ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                'Submit Decision'
               )}
-            </div>
-
-            {/* Submit Button */}
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={onClose}
-                className="flex-1 h-11 rounded-xl border border-border font-medium text-muted-foreground hover:bg-muted transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (activeAction === 'approve') onApprove();
-                  else if (activeAction === 'block') onBlock();
-                  else if (activeAction === 'correct' && correctedResponse)
-                    onCorrect(correctedResponse);
-                }}
-                disabled={
-                  !activeAction ||
-                  (activeAction === 'correct' && !correctedResponse)
-                }
-                className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Submit Decision
-              </button>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -525,6 +1025,112 @@ function ConfirmModal({
   );
 }
 
+// Warning Action Cell - Shows warning buttons or block button based on user's warning count
+function WarningActionCell({
+  anomaly,
+  onReview,
+  onWarn,
+  onBlock,
+  isWarnLoading,
+}: {
+  anomaly: Anomaly;
+  onReview: (anomaly: Anomaly) => void;
+  onWarn: (userId: string, anomalyId: string) => void;
+  onBlock: (anomaly: Anomaly) => void;
+  isWarnLoading: boolean;
+}) {
+  const { data: warningData, isLoading: warningLoading } =
+    trpc.admin.getUserWarningCount.useQuery(
+      { userId: anomaly.userId },
+      { enabled: anomaly.status === 'pending' }
+    );
+
+  // For non-pending anomalies, just show View button
+  if (anomaly.status !== 'pending') {
+    return (
+      <button
+        onClick={() => onReview(anomaly)}
+        className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+      >
+        View
+      </button>
+    );
+  }
+
+  // Loading state
+  if (warningLoading) {
+    return (
+      <div className="flex items-center justify-end gap-2">
+        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const warningCount = warningData?.warningCount ?? 0;
+  const isBlocked = warningData?.isBlocked ?? false;
+
+  // Determine action buttons
+
+  if (isBlocked) {
+    return (
+      <span className="px-3 py-1.5 text-xs font-medium text-rose-700 bg-rose-100 rounded-full">
+        Blocked
+      </span>
+    );
+  }
+
+  const nextWarning = warningCount + 1;
+  const warningColors = {
+    1: 'text-amber-600 bg-amber-50 hover:bg-amber-100',
+    2: 'text-orange-600 bg-orange-50 hover:bg-orange-100',
+    3: 'text-red-600 bg-red-50 hover:bg-red-100',
+  };
+  // Default color for warnings > 3
+  const defaultWarningColor = 'text-red-700 bg-red-50 hover:bg-red-100';
+  const warningColorClass = (nextWarning <= 3 ? warningColors[nextWarning as 1 | 2 | 3] : defaultWarningColor);
+  const displayWarningCount = nextWarning > 3 ? 3 : nextWarning;
+
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {/* Show Warning button only if less than 3 warnings */}
+      {warningCount < 3 && (
+        <button
+          onClick={() => onWarn(anomaly.userId, anomaly.id)}
+          disabled={isWarnLoading}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${warningColorClass}`}
+        >
+          {isWarnLoading ? (
+            <span className="flex items-center gap-2">
+              <div className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+              Warning...
+            </span>
+          ) : (
+            `Warning ${displayWarningCount}`
+          )}
+        </button>
+      )}
+
+      {/* Show Block button if 3 or more warnings */}
+      {warningCount >= 3 && (
+        <button
+          onClick={() => onBlock(anomaly)}
+          disabled={isWarnLoading}
+          className="px-4 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors disabled:opacity-50"
+        >
+          Block User
+        </button>
+      )}
+
+      <button
+        onClick={() => onReview(anomaly)}
+        className="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+      >
+        Review
+      </button>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<'triage' | 'semantic' | 'users'>(
@@ -559,32 +1165,74 @@ export default function AdminDashboard() {
   const { data: stats, isLoading: statsLoading } =
     trpc.admin.getStats.useQuery();
 
-  // Fetch anomaly stats
-  const { data: anomalyStats } = trpc.admin.getAnomalyStats.useQuery();
+  // Fetch anomaly stats (polling every 5 seconds)
+  const { data: anomalyStats } = trpc.admin.getAnomalyStats.useQuery(
+    undefined,
+    {
+      refetchInterval: 5000,
+    },
+  );
 
-  // Fetch anomalies from database
+  // Fetch anomalies from database (polling every 5 seconds)
   const { data: anomaliesData, isLoading: anomaliesLoading } =
-    trpc.admin.getAnomalies.useQuery({
-      page: anomalyPage,
-      limit: 20,
-      status: statusFilter,
-    });
+    trpc.admin.getAnomalies.useQuery(
+      {
+        page: anomalyPage,
+        limit: 20,
+        status: statusFilter,
+      },
+      {
+        refetchInterval: 5000,
+      },
+    );
 
-  // Fetch Layer 2 semantic reviews (human-in-the-loop pending)
+  // Fetch Layer 2 semantic reviews (human-in-the-loop pending, polling every 5 seconds)
   const [semanticPage, setSemanticPage] = useState(1);
-  const semanticReviewsQuery = trpc.admin.getPendingSemanticReviews.useQuery({
-    page: semanticPage,
-    limit: 20,
-  });
+  const semanticReviewsQuery = trpc.admin.getPendingSemanticReviews.useQuery(
+    {
+      page: semanticPage,
+      limit: 20,
+    },
+    {
+      refetchInterval: 5000,
+    },
+  );
   const semanticReviewsData = semanticReviewsQuery.data as
     | {
-        anomalies: SemanticReviewAnomaly[];
-        total: number;
-        pages: number;
-        currentPage: number;
-      }
+      anomalies: SemanticReviewAnomaly[];
+      total: number;
+      pages: number;
+      currentPage: number;
+    }
     | undefined;
   const semanticLoading = semanticReviewsQuery.isLoading;
+
+  // Fetch pending human reviews (blocked chats awaiting admin action, polling every 5 seconds)
+  const [humanReviewPage, setHumanReviewPage] = useState(1);
+  const pendingHumanReviewsQuery = trpc.admin.getPendingHumanReviews.useQuery(
+    {
+      page: humanReviewPage,
+      limit: 20,
+    },
+    {
+      refetchInterval: 5000,
+    },
+  );
+  const pendingHumanReviewsData = pendingHumanReviewsQuery.data as
+    | {
+      chats: PendingHumanReview[];
+      total: number;
+      pages: number;
+      currentPage: number;
+    }
+    | undefined;
+  const humanReviewsLoading = pendingHumanReviewsQuery.isLoading;
+
+  // State for human review modal
+  const [humanReviewModalOpen, setHumanReviewModalOpen] = useState(false);
+  const [selectedChatForReview, setSelectedChatForReview] =
+    useState<PendingHumanReview | null>(null);
+  const [originalAIResponse, setOriginalAIResponse] = useState<string>('');
 
   // Fetch users
   const {
@@ -592,12 +1240,12 @@ export default function AdminDashboard() {
     isLoading: usersLoading,
     refetch,
   } = isSearching && searchQuery
-    ? trpc.admin.searchUsers.useQuery({
+      ? trpc.admin.searchUsers.useQuery({
         query: searchQuery,
         page: currentPage,
         limit: 10,
       })
-    : trpc.admin.getAllUsers.useQuery({ page: currentPage, limit: 10 });
+      : trpc.admin.getAllUsers.useQuery({ page: currentPage, limit: 10 });
 
   // Mutations
   const makeAdminMutation = trpc.admin.makeAdmin.useMutation({
@@ -624,6 +1272,77 @@ export default function AdminDashboard() {
       setSelectedAnomaly(null);
     },
   });
+
+  // Human review action mutation (for blocked chats)
+  const humanReviewActionMutation = trpc.admin.humanReviewAction.useMutation({
+    onSuccess: () => {
+      utils.admin.getPendingHumanReviews.invalidate();
+      utils.admin.getAnomalyStats.invalidate();
+      utils.admin.getStats.invalidate();
+      setHumanReviewModalOpen(false);
+      setSelectedChatForReview(null);
+      setOriginalAIResponse('');
+    },
+  });
+
+  // Warn user mutation (for issuing warnings before blocking)
+  const warnUserMutation = trpc.admin.warnUser.useMutation({
+    onSuccess: () => {
+      utils.admin.getAnomalies.invalidate();
+      utils.admin.getUserWarningCount.invalidate();
+      utils.admin.getAnomalyStats.invalidate();
+      utils.admin.getStats.invalidate();
+    },
+  });
+
+  // Handler to open human review modal and fetch original AI response
+  const handleOpenHumanReviewModal = async (chat: PendingHumanReview) => {
+    setSelectedChatForReview(chat);
+    setHumanReviewModalOpen(true);
+
+    // Find the pending review message to get original content
+    const pendingMessage = chat.messages.find(m => m.isPendingReview);
+    if (pendingMessage?.originalContent) {
+      setOriginalAIResponse(pendingMessage.originalContent);
+    } else {
+      // If originalContent is not in the message, look for it from the AI response
+      const aiMessage = chat.messages.find(m => m.role === 'assistant');
+      setOriginalAIResponse(
+        aiMessage?.originalContent ||
+        aiMessage?.content ||
+        'No AI response available',
+      );
+    }
+  };
+
+  // Human review action handlers
+  const handleHumanReviewApprove = async () => {
+    if (selectedChatForReview) {
+      await humanReviewActionMutation.mutateAsync({
+        chatId: selectedChatForReview.id,
+        action: 'approve',
+      });
+    }
+  };
+
+  const handleHumanReviewBlock = async () => {
+    if (selectedChatForReview) {
+      await humanReviewActionMutation.mutateAsync({
+        chatId: selectedChatForReview.id,
+        action: 'block',
+      });
+    }
+  };
+
+  const handleHumanReviewRespond = async (response: string) => {
+    if (selectedChatForReview) {
+      await humanReviewActionMutation.mutateAsync({
+        chatId: selectedChatForReview.id,
+        action: 'admin_response',
+        adminResponse: response,
+      });
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -699,6 +1418,20 @@ export default function AdminDashboard() {
     }
   };
 
+  // Handler for issuing warnings from the table
+  const handleWarn = async (userId: string, anomalyId: string) => {
+    await warnUserMutation.mutateAsync({ userId, anomalyId });
+  };
+
+  // Handler for blocking from the table (user has 3+ warnings)
+  const handleBlockFromTable = async (anomaly: Anomaly) => {
+    await reviewAnomalyMutation.mutateAsync({
+      id: anomaly.id,
+      action: 'block',
+      reviewNotes: 'Blocked after 3 warnings by admin',
+    });
+  };
+
   // Use data from API with explicit typing
   const anomaliesRaw = anomaliesData?.anomalies;
   const anomalies: Anomaly[] = anomaliesRaw
@@ -709,6 +1442,22 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Human Review Action Modal */}
+      <HumanReviewActionModal
+        isOpen={humanReviewModalOpen}
+        onClose={() => {
+          setHumanReviewModalOpen(false);
+          setSelectedChatForReview(null);
+          setOriginalAIResponse('');
+        }}
+        chat={selectedChatForReview}
+        originalAIResponse={originalAIResponse}
+        onApprove={handleHumanReviewApprove}
+        onBlock={handleHumanReviewBlock}
+        onRespond={handleHumanReviewRespond}
+        isLoading={humanReviewActionMutation.isPending}
+      />
+
       {/* User Management Modal */}
       <ConfirmModal
         isOpen={modalState.isOpen}
@@ -744,6 +1493,7 @@ export default function AdminDashboard() {
         onApprove={handleApprove}
         onBlock={handleBlock}
         onCorrect={handleCorrect}
+        isLoading={reviewAnomalyMutation.isPending}
       />
 
       {/* Header */}
@@ -940,11 +1690,10 @@ export default function AdminDashboard() {
         <div className="flex gap-2 mb-6 border-b border-border">
           <button
             onClick={() => setActiveTab('triage')}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'triage'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'triage'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
           >
             <span className="flex items-center gap-2">
               <svg
@@ -972,11 +1721,10 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'users'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'users'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
           >
             <span className="flex items-center gap-2">
               <svg
@@ -999,11 +1747,10 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('semantic')}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'semantic'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'semantic'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
           >
             <span className="flex items-center gap-2">
               <svg
@@ -1055,11 +1802,10 @@ export default function AdminDashboard() {
                       setStatusFilter(status);
                       setAnomalyPage(1);
                     }}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                      statusFilter === status
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                    }`}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${statusFilter === status
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      }`}
                   >
                     {status.charAt(0).toUpperCase() + status.slice(1)}
                   </button>
@@ -1140,15 +1886,14 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-6 py-4">
                             <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                anomaly.severity === 'critical'
-                                  ? 'bg-rose-100 text-rose-700'
-                                  : anomaly.severity === 'high'
-                                    ? 'bg-orange-100 text-orange-700'
-                                    : anomaly.severity === 'medium'
-                                      ? 'bg-amber-100 text-amber-700'
-                                      : 'bg-blue-100 text-blue-700'
-                              }`}
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${anomaly.severity === 'critical'
+                                ? 'bg-rose-100 text-rose-700'
+                                : anomaly.severity === 'high'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : anomaly.severity === 'medium'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}
                             >
                               {anomaly.severity.charAt(0).toUpperCase() +
                                 anomaly.severity.slice(1)}
@@ -1162,36 +1907,27 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-6 py-4">
                             <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                anomaly.status === 'pending'
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : anomaly.status === 'approved'
-                                    ? 'bg-emerald-100 text-emerald-700'
-                                    : anomaly.status === 'blocked'
-                                      ? 'bg-rose-100 text-rose-700'
-                                      : 'bg-blue-100 text-blue-700'
-                              }`}
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${anomaly.status === 'pending'
+                                ? 'bg-amber-100 text-amber-700'
+                                : anomaly.status === 'approved'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : anomaly.status === 'blocked'
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}
                             >
                               {anomaly.status.charAt(0).toUpperCase() +
                                 anomaly.status.slice(1)}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            {anomaly.status === 'pending' ? (
-                              <button
-                                onClick={() => handleReview(anomaly)}
-                                className="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                              >
-                                Review
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleReview(anomaly)}
-                                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
-                              >
-                                View
-                              </button>
-                            )}
+                            <WarningActionCell
+                              anomaly={anomaly}
+                              onReview={handleReview}
+                              onWarn={handleWarn}
+                              onBlock={handleBlockFromTable}
+                              isWarnLoading={warnUserMutation.isPending || reviewAnomalyMutation.isPending}
+                            />
                           </td>
                         </tr>
                       ))}
@@ -1306,13 +2042,12 @@ export default function AdminDashboard() {
                         <div className="flex items-start gap-4">
                           {/* Risk Indicator */}
                           <div
-                            className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              semantic?.riskLevel === 'high'
-                                ? 'bg-rose-100 text-rose-600'
-                                : semantic?.riskLevel === 'medium'
-                                  ? 'bg-amber-100 text-amber-600'
-                                  : 'bg-blue-100 text-blue-600'
-                            }`}
+                            className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${semantic?.riskLevel === 'high'
+                              ? 'bg-rose-100 text-rose-600'
+                              : semantic?.riskLevel === 'medium'
+                                ? 'bg-amber-100 text-amber-600'
+                                : 'bg-blue-100 text-blue-600'
+                              }`}
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -1345,6 +2080,10 @@ export default function AdminDashboard() {
 
                             {/* Flags */}
                             <div className="flex flex-wrap gap-2 mb-3">
+                              {/* CHAT BLOCKING INDICATOR - Always show for Layer 2 */}
+                              <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700 animate-pulse">
+                                🚫 Chat Blocked - User Waiting
+                              </span>
                               {semantic?.isHallucination && (
                                 <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
                                   🎭 Hallucination Risk
@@ -1367,13 +2106,12 @@ export default function AdminDashboard() {
                               )}
                               {semantic?.accuracyScore !== undefined && (
                                 <span
-                                  className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                    semantic.accuracyScore >= 80
-                                      ? 'bg-emerald-100 text-emerald-700'
-                                      : semantic.accuracyScore >= 60
-                                        ? 'bg-amber-100 text-amber-700'
-                                        : 'bg-rose-100 text-rose-700'
-                                  }`}
+                                  className={`px-2 py-1 text-xs font-medium rounded-full ${semantic.accuracyScore >= 80
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : semantic.accuracyScore >= 60
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-rose-100 text-rose-700'
+                                    }`}
                                 >
                                   📊 Accuracy: {semantic.accuracyScore}%
                                 </span>

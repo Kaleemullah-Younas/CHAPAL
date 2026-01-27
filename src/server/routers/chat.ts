@@ -67,6 +67,16 @@ export const chatRouter = router({
           userId: true,
           createdAt: true,
           updatedAt: true,
+          // Human Review blocking fields
+          isHumanReviewBlocked: true,
+          humanReviewReason: true,
+          humanReviewMessageId: true,
+          humanReviewStatus: true,
+          humanReviewMessage: true,
+          humanReviewAdminId: true,
+          humanReviewResponse: true,
+          humanReviewedAt: true,
+          humanReviewLocked: true,
           messages: {
             select: {
               id: true,
@@ -75,6 +85,11 @@ export const chatRouter = router({
               attachments: true,
               chatId: true,
               createdAt: true,
+              isBlocked: true,
+              isWarning: true,
+              isPendingReview: true,
+              isAdminCorrected: true,
+              correctedAt: true,
             },
             orderBy: { createdAt: 'asc' },
           },
@@ -95,6 +110,16 @@ export const chatRouter = router({
         userId: chat.userId,
         createdAt: chat.createdAt,
         updatedAt: chat.updatedAt,
+        // Human Review blocking
+        isHumanReviewBlocked: chat.isHumanReviewBlocked,
+        humanReviewReason: chat.humanReviewReason,
+        humanReviewMessageId: chat.humanReviewMessageId,
+        humanReviewStatus: chat.humanReviewStatus,
+        humanReviewMessage: chat.humanReviewMessage,
+        humanReviewAdminId: chat.humanReviewAdminId,
+        humanReviewResponse: chat.humanReviewResponse,
+        humanReviewedAt: chat.humanReviewedAt,
+        humanReviewLocked: chat.humanReviewLocked,
         messages: chat.messages.map(m => ({
           id: m.id,
           role: m.role,
@@ -104,6 +129,11 @@ export const chatRouter = router({
             | null,
           chatId: m.chatId,
           createdAt: m.createdAt,
+          isBlocked: m.isBlocked,
+          isWarning: m.isWarning,
+          isPendingReview: m.isPendingReview,
+          isAdminCorrected: m.isAdminCorrected,
+          correctedAt: m.correctedAt,
         })),
       };
     }),
@@ -112,6 +142,20 @@ export const chatRouter = router({
   createChat: protectedProcedure
     .input(z.object({ title: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
+      // Check if user is blocked
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { isBlocked: true },
+      });
+
+      if (user?.isBlocked) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message:
+            'Your account has been blocked. You cannot create new chats.',
+        });
+      }
+
       const chat = await prisma.chat.create({
         data: {
           title: input.title || 'New Chat',
@@ -293,4 +337,304 @@ export const chatRouter = router({
         orderBy: { createdAt: 'asc' },
       });
     }),
+
+  // Get anomaly logs for a specific chat (for Live Flag Log persistence)
+  getAnomalyLogs: protectedProcedure
+    .input(z.object({ chatId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Verify chat belongs to user
+      const chat = await prisma.chat.findFirst({
+        where: {
+          id: input.chatId,
+          userId: ctx.session.user.id,
+        },
+      });
+
+      if (!chat) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Chat not found',
+        });
+      }
+
+      // Get all messages with safety scores for this chat
+      const messages = await prisma.message.findMany({
+        where: { chatId: input.chatId },
+        select: {
+          safetyScore: true,
+          accuracyScore: true,
+          semanticAnalysis: true,
+          userEmotion: true,
+          emotionIntensity: true,
+          role: true,
+        },
+      });
+
+      // Get all anomaly logs for this chat
+      const anomalyLogs = await prisma.anomalyLog.findMany({
+        where: { chatId: input.chatId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          anomalyType: true,
+          severity: true,
+          layer: true,
+          createdAt: true,
+          detectionDetails: true,
+          safetyScore: true,
+          accuracyScore: true,
+          userEmotion: true,
+        },
+      });
+
+      // Calculate average safety score from all messages
+      const safetyScores = messages
+        .map(m => m.safetyScore)
+        .filter((s): s is number => s !== null);
+      const avgSafetyScore =
+        safetyScores.length > 0
+          ? Math.round(
+            safetyScores.reduce((a, b) => a + b, 0) / safetyScores.length,
+          )
+          : 100;
+
+      // Calculate average accuracy score only from messages with Layer 2 analysis
+      // (messages where semanticAnalysis is not null had Layer 2 run)
+      const accuracyScores = messages
+        .filter(m => m.semanticAnalysis !== null && m.accuracyScore !== null)
+        .map(m => m.accuracyScore as number);
+      const avgAccuracyScore =
+        accuracyScores.length > 0
+          ? Math.round(
+            accuracyScores.reduce((a, b) => a + b, 0) / accuracyScores.length,
+          )
+          : 100;
+
+      // Calculate predominant emotion from all user messages (not just anomaly logs)
+      const emotionCounts: Record<string, number> = {};
+      const intensityCounts: Record<string, number> = {
+        low: 0,
+        medium: 0,
+        high: 0,
+      };
+
+      // Get emotions from user messages (which store emotion data)
+      const userMessages = messages.filter(m => m.role === 'user');
+      for (const msg of userMessages) {
+        // Count emotions
+        const emotion = msg.userEmotion || 'Neutral';
+        emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
+
+        // Count emotion intensities
+        const intensity =
+          (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low';
+        intensityCounts[intensity]++;
+      }
+
+      // Find the most common emotion
+      let predominantEmotion = 'Neutral';
+      let maxCount = 0;
+      for (const [emotion, count] of Object.entries(emotionCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          predominantEmotion = emotion;
+        }
+      }
+
+      // Find the most common intensity
+      let predominantIntensity: 'low' | 'medium' | 'high' = 'low';
+      if (
+        intensityCounts.high > intensityCounts.medium &&
+        intensityCounts.high > intensityCounts.low
+      ) {
+        predominantIntensity = 'high';
+      } else if (intensityCounts.medium > intensityCounts.low) {
+        predominantIntensity = 'medium';
+      }
+
+      // Determine the current layer (semantic if any Layer 2 analysis exists)
+      const hasSemanticAnalysis = anomalyLogs.some(
+        log => log.layer === 'semantic',
+      );
+      const currentLayer = hasSemanticAnalysis ? 'semantic' : 'deterministic';
+
+      // Transform to the format expected by TransparencyPanel
+      const logs = anomalyLogs.map(log => {
+        // Extract the descriptive message from detectionDetails
+        const details = log.detectionDetails as {
+          anomalies?: Array<{
+            message?: string;
+            type?: string;
+            subType?: string;
+          }>;
+        } | null;
+
+        // Get the first anomaly's message for display
+        const primaryAnomaly = details?.anomalies?.[0];
+        const displayMessage = primaryAnomaly?.message || log.anomalyType;
+
+        return {
+          id: log.id,
+          timestamp: new Date(log.createdAt).toLocaleTimeString(),
+          type: displayMessage,
+          message: `${log.anomalyType}${primaryAnomaly?.subType ? ` (${primaryAnomaly.subType})` : ''}`,
+          severity: (log.severity === 'critical' ? 'high' : log.severity) as
+            | 'low'
+            | 'medium'
+            | 'high',
+          layer: log.layer as 'deterministic' | 'semantic',
+        };
+      });
+
+      // Prepare detection history for client-side cumulative calculations
+      // Use emotions from user messages (not anomaly logs) for complete history
+      const emotionsHistory = userMessages.map(msg => {
+        return {
+          emotion: msg.userEmotion || 'Neutral',
+          intensity:
+            (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low',
+        };
+      });
+
+      return {
+        logs,
+        // Return aggregated panel state for the whole chat
+        // Always return panel state - use calculated values if available, defaults otherwise
+        panelState: {
+          safetyScore: avgSafetyScore,
+          accuracyScore: avgAccuracyScore,
+          userEmotion: predominantEmotion,
+          emotionIntensity: predominantIntensity,
+          layer: currentLayer as 'deterministic' | 'semantic',
+        },
+        // Return raw detection history for client-side cumulative calculations
+        detectionHistory: {
+          safetyScores,
+          accuracyScores,
+          emotions: emotionsHistory,
+        },
+      };
+    }),
+
+  // Get unread notifications for the current user
+  getNotifications: protectedProcedure.query(async ({ ctx }) => {
+    // Find all messages with notifications for user's chats
+    const notifications = await prisma.message.findMany({
+      where: {
+        hasNotification: true,
+        notificationRead: false,
+        chat: {
+          userId: ctx.session.user.id,
+        },
+      },
+      select: {
+        id: true,
+        content: true,
+        isAdminCorrected: true,
+        correctedAt: true,
+        createdAt: true,
+        chat: {
+          select: {
+            id: true,
+            title: true,
+            humanReviewStatus: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20, // Limit to 20 most recent notifications
+    });
+
+    return notifications.map(n => {
+      // Determine action type
+      let action: 'approve' | 'block' | 'admin_response' | 'warning' = 'admin_response';
+      let message = 'Admin responded to your chat';
+
+      // Check specifically for warning messages first (created by admin.warnUser)
+      // These messages are created with isWarning=true and hasNotification=true
+      // We check content to be sure or rely on isWarning if available in selection
+      // Note: isWarning is not in default selection above, need to add it ideally,
+      // but we can infer from content starting with "⚠️ SYSTEM WARNING:"
+      const isSystemWarning = n.content.startsWith('⚠️ SYSTEM WARNING:');
+
+      if (isSystemWarning) {
+        action = 'warning';
+        message = n.content.replace('⚠️ SYSTEM WARNING: ', '⚠️ ');
+      } else if (n.chat.humanReviewStatus === 'approved') {
+        action = 'approve';
+        message = 'Admin approved the AI response';
+      } else if (n.chat.humanReviewStatus === 'blocked') {
+        action = 'block';
+        message = 'Your account has been blocked';
+      }
+
+      return {
+        id: n.id,
+        chatId: n.chat.id,
+        chatTitle: n.chat.title || 'Untitled Chat',
+        action,
+        message,
+        timestamp: (n.correctedAt || n.createdAt).toISOString(),
+      };
+    });
+  }),
+
+  // Get notification count for badge
+  getNotificationCount: protectedProcedure.query(async ({ ctx }) => {
+    const count = await prisma.message.count({
+      where: {
+        hasNotification: true,
+        notificationRead: false,
+        chat: {
+          userId: ctx.session.user.id,
+        },
+      },
+    });
+    return { count };
+  }),
+
+  // Mark a notification as read
+  markNotificationRead: protectedProcedure
+    .input(z.object({ messageId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify the message belongs to user's chat
+      const message = await prisma.message.findFirst({
+        where: {
+          id: input.messageId,
+          chat: {
+            userId: ctx.session.user.id,
+          },
+        },
+      });
+
+      if (!message) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Message not found',
+        });
+      }
+
+      await prisma.message.update({
+        where: { id: input.messageId },
+        data: { notificationRead: true },
+      });
+
+      return { success: true };
+    }),
+
+  // Mark all notifications as read
+  markAllNotificationsRead: protectedProcedure.mutation(async ({ ctx }) => {
+    await prisma.message.updateMany({
+      where: {
+        hasNotification: true,
+        notificationRead: false,
+        chat: {
+          userId: ctx.session.user.id,
+        },
+      },
+      data: { notificationRead: true },
+    });
+
+    return { success: true };
+  }),
 });
