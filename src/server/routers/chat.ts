@@ -382,7 +382,8 @@ export const chatRouter = router({
         emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
 
         // Count emotion intensities
-        const intensity = (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low';
+        const intensity =
+          (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low';
         intensityCounts[intensity]++;
       }
 
@@ -446,7 +447,8 @@ export const chatRouter = router({
       const emotionsHistory = userMessages.map(msg => {
         return {
           emotion: msg.userEmotion || 'Neutral',
-          intensity: (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low',
+          intensity:
+            (msg.emotionIntensity as 'low' | 'medium' | 'high') || 'low',
         };
       });
 
