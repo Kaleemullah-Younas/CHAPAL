@@ -75,15 +75,18 @@ export class AllKeysExhaustedError extends Error {
   }
 }
 
-// Helper to check if error is a 429 rate limit error
-function isRateLimitError(error: unknown): boolean {
+// Helper to check if error is a 429 rate limit error or 503 overload error
+function isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
     return (
       message.includes('429') ||
       message.includes('rate limit') ||
       message.includes('quota exceeded') ||
-      message.includes('resource exhausted')
+      message.includes('resource exhausted') ||
+      message.includes('503') ||
+      message.includes('service unavailable') ||
+      message.includes('overloaded')
     );
   }
   return false;
@@ -103,6 +106,8 @@ export async function* streamGeminiResponse(
 ): AsyncGenerator<string, void, unknown> {
   // Reset to first key at the start of a new request
   keyManager.resetKeyIndex();
+  let retryCount = 0;
+  const maxRetries = 3; // Maximum full cycles through all keys
 
   while (true) {
     try {
@@ -125,16 +130,27 @@ export async function* streamGeminiResponse(
       }
       return; // Success, exit the function
     } catch (error) {
-      if (isRateLimitError(error)) {
+      if (isRetryableError(error)) {
         console.warn(
-          `Rate limit hit on API key ${keyManager.getCurrentKeyNumber()}/${keyManager.getTotalKeys()}`,
+          `Retryable error (rate limit/503) on API key ${keyManager.getCurrentKeyNumber()}/${keyManager.getTotalKeys()}`,
         );
         if (!keyManager.rotateToNextKey()) {
-          throw new AllKeysExhaustedError();
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            throw new Error(
+              'Gemini service is currently overloaded. Please try again in a few moments.',
+            );
+          }
+          // All keys exhausted, wait and retry with first key
+          console.log(
+            `All keys exhausted (attempt ${retryCount}/${maxRetries}), waiting 5 seconds before retry...`,
+          );
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          keyManager.resetKeyIndex();
         }
-        // Continue to retry with next key
+        // Continue to retry with next/reset key
       } else {
-        // Non-rate-limit error, rethrow
+        // Non-retryable error, rethrow
         throw error;
       }
     }
@@ -144,6 +160,8 @@ export async function* streamGeminiResponse(
 export async function generateChatTitle(firstMessage: string): Promise<string> {
   // Reset to first key at the start of a new request
   keyManager.resetKeyIndex();
+  let retryCount = 0;
+  const maxRetries = 3; // Maximum full cycles through all keys
 
   while (true) {
     try {
@@ -153,17 +171,28 @@ export async function generateChatTitle(firstMessage: string): Promise<string> {
       );
       return result.response.text().trim().slice(0, 50);
     } catch (error) {
-      if (isRateLimitError(error)) {
+      if (isRetryableError(error)) {
         console.warn(
-          `Rate limit hit on API key ${keyManager.getCurrentKeyNumber()}/${keyManager.getTotalKeys()}`,
+          `Retryable error (rate limit/503) on API key ${keyManager.getCurrentKeyNumber()}/${keyManager.getTotalKeys()}`,
         );
         if (!keyManager.rotateToNextKey()) {
-          throw new AllKeysExhaustedError();
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            // Return a fallback title instead of throwing
+            return 'New Chat';
+          }
+          // All keys exhausted, wait and retry with first key
+          console.log(
+            `All keys exhausted (attempt ${retryCount}/${maxRetries}), waiting 5 seconds before retry...`,
+          );
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          keyManager.resetKeyIndex();
         }
-        // Continue to retry with next key
+        // Continue to retry with next/reset key
       } else {
-        // Non-rate-limit error, rethrow
-        throw error;
+        // Non-retryable error, return fallback title
+        console.error('Error generating chat title:', error);
+        return 'New Chat';
       }
     }
   }

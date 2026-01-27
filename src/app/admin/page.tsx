@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { trpc } from '@/lib/trpc';
 import { useSession, signOut } from '@/lib/auth-client';
 import Link from 'next/link';
 import Image from 'next/image';
+import { getPusherClient, PUSHER_EVENTS } from '@/lib/pusher-client';
 
 // Type definition for anomalies
 interface Anomaly {
@@ -128,7 +129,7 @@ function ReviewModal({
   const isLocked = anomaly.status !== 'pending';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
@@ -657,7 +658,7 @@ function HumanReviewActionModal({
   const userMessage = [...chat.messages].reverse().find(m => m.role === 'user');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
@@ -1043,7 +1044,7 @@ function SemanticReviewModal({
   const iterationCount = iterations.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
@@ -1539,7 +1540,7 @@ function ConfirmModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
@@ -1746,6 +1747,37 @@ export default function AdminDashboard() {
   });
 
   const utils = trpc.useUtils();
+
+  // Real-time Pusher subscription for admin notifications
+  useEffect(() => {
+    const pusher = getPusherClient();
+    const channel = pusher.subscribe('admin-channel');
+
+    // Handle new anomaly notifications (e.g., DDoS detection)
+    const handleNotification = (data: {
+      id: string;
+      type: string;
+      severity: string;
+      userEmail: string;
+      chatId: string;
+      message: string;
+      timestamp: string;
+    }) => {
+      console.log('[Admin] Real-time notification received:', data);
+      // Immediately refetch anomalies and stats
+      utils.admin.getAnomalies.invalidate();
+      utils.admin.getAnomalyStats.invalidate();
+      utils.admin.getStats.invalidate();
+      utils.admin.getPendingHumanReviews.invalidate();
+    };
+
+    channel.bind(PUSHER_EVENTS.NOTIFICATION, handleNotification);
+
+    return () => {
+      channel.unbind(PUSHER_EVENTS.NOTIFICATION, handleNotification);
+      pusher.unsubscribe('admin-channel');
+    };
+  }, [utils]);
 
   // Fetch stats
   const { data: stats, isLoading: statsLoading } =

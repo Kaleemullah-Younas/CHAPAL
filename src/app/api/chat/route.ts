@@ -25,6 +25,7 @@ import {
   AnomalyDetail,
 } from '@/lib/anomaly-detection';
 import { analyzeWithGroq, SemanticAnalysisResult } from '@/lib/groq';
+import { pusher, PUSHER_EVENTS } from '@/lib/pusher-server';
 
 export const runtime = 'nodejs';
 
@@ -83,9 +84,7 @@ export async function POST(req: NextRequest) {
 
     // ============== LAYER 1: Sudden Spike Detection (DDoS Protection) ==============
     // Check for rapid message rate (potential DDoS/abuse)
-    const isSimulatedDdos = message.includes(
-      'Testing rapid message sending for DDoS detection',
-    );
+    const isSimulatedDdos = message.includes('[DDOS_SIMULATION]');
     const spikeResult = detectSuddenSpike(session.user.id, isSimulatedDdos);
 
     // If spike detected and should block, block the chat immediately
@@ -138,7 +137,7 @@ export async function POST(req: NextRequest) {
         });
 
         // Create anomaly log for admin review
-        await prisma.anomalyLog.create({
+        const anomalyLog = await prisma.anomalyLog.create({
           data: {
             messageId: spikeAssistantMessage.id,
             userId: session.user.id,
@@ -168,6 +167,21 @@ export async function POST(req: NextRequest) {
             status: 'pending',
           },
         });
+
+        // Trigger real-time admin notification via Pusher
+        try {
+          await pusher.trigger('admin-channel', PUSHER_EVENTS.NOTIFICATION, {
+            id: anomalyLog.id,
+            type: 'sudden_spike',
+            severity: 'critical',
+            userEmail: session.user.email,
+            chatId,
+            message: `⚡ DDoS Attack Detected: ${spikeResult.messageCount} rapid messages from ${session.user.email}`,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (pusherError) {
+          console.error('Failed to send Pusher notification:', pusherError);
+        }
 
         // Return blocked response
         return NextResponse.json({
