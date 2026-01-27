@@ -35,7 +35,7 @@ export default async function authMiddleware(request: NextRequest) {
   const isAdminPage =
     request.nextUrl.pathname.startsWith('/admin') && !isAdminAuthPage;
   const isHomePage = request.nextUrl.pathname === '/';
-  const isPublicPage = isHomePage; // Landing page
+  const isPublicPage = isHomePage || request.nextUrl.pathname.startsWith('/docs'); // Landing page and Docs
   const isBlockedPage = request.nextUrl.pathname === '/blocked';
 
   // Check if user is blocked - redirect to blocked page

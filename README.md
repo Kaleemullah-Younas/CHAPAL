@@ -1,48 +1,106 @@
-# CHAPAL - Contextual Human-Assisted Protection and Anomaly Learning
+# CHAPAL: Contextual Human-Assisted Protection and Anomaly Learning
 
-**CHAPAL** is a next-generation AI auditing system designed to make Large Language Model interactions safe, transparent, and compliant. It features a dual-layer detection architecture (Deterministic + Semantic) and a Human-in-the-Loop intervention workflow.
+<div align="center">
 
-## 📚 Documentation
+![Next.js](https://img.shields.io/badge/next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/typescript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/tailwindcss-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![Prisma](https://img.shields.io/badge/prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=googlebard&logoColor=white)
+![Llama 3.1](https://img.shields.io/badge/Llama%203.1-0496FF?style=for-the-badge&logo=meta&logoColor=white)
 
-We have comprehensive modular documentation available for developers and users.
-
-### [System Architecture](/docs/ARCHITECTURE.md)
-*   **Best for:** Developers, Architects.
-*   **Topics:** Dual-Layer Data Flow, Gemini/Groq Integration, Tech Stack.
-
-### [User & Feature Guide](/docs/USER_GUIDE.md)
-*   **Best for:** End Users, QA Testers.
-*   **Topics:** Using the Chat, Simulation Toolbar (DDoS, Injection tests), Transparency Panel metrics.
-
-### [Admin & Triage Guide](/docs/ADMIN_GUIDE.md)
-*   **Best for:** Moderators, Admins.
-*   **Topics:** Triage Dashboard, Correcting hallucinations, Approval workflows.
+</div>
 
 ---
 
-## 🚀 Quick Start
+## 🛡️ Project Overview
 
-1.  **Install Dependencies**
+**CHAPAL** is a cutting-edge **AI Safety & Auditing Platform** designed to solve the critical challenge of trust in Large Language Models (LLMs). By combining deterministic rule sets with semantic understanding, CHAPAL acts as a firewall between users and AI, ensuring every interaction is safe, accurate, and compliant.
+
+Unlike traditional "black box" filters, CHAPAL introduces a **Human-in-the-Loop (HITL)** workflow, allowing experts to review blocked content, correct hallucinations, and fine-tune the system in real-time.
+
+---
+
+## 🏗️ System Architecture
+
+Our **Dual-Layer Detection System** ensures robust protection without compromising speed.
+
+![System Architecture](docs/architecture-diagram.jpeg)
+
+1.  **Layer 1 (Deterministic Guard):** Instantly mitigates high-velocity threats like DDoS attacks, PII leaks, and known injection patterns using regex and heuristic logic.
+2.  **Layer 2 (Semantic Auditor):** Powered by **Llama 3.1 (via Groq)**, this layer "reads" the conversation to detect subtle nuances like hostile tone, medical advice, hallucinations, and psychological distress.
+
+---
+
+## 🌟 Key Features
+
+*   **⚡ Real-Time Anomaly Detection**:
+    *   **Prompt Injection**: Detects attempts to jailbreak the model (e.g., "Ignore previous instructions").
+    *   **Hallucination Check**: Cross-references AI responses for factual consistency.
+    *   **Policy Enforcement**: Blocks Medical/Legal advice and Toxic content.
+*   **👩‍💻 Human-in-the-Loop Intervention**:
+    *   Admins can **Approve**, **Block**, or **Rewrite** flagged responses.
+    *   " Rewrite" actions create a feedback loop, improving the model over time.
+*   **📊 Transparent Analytics**:
+    *   **Safety Score**: Live 0-100 metric for every session.
+    *   **Emotion Recognition**: Tracks user sentiment intensity.
+*   **🔧 Developer Simulation Tools**:
+    *   Built-in toolbar to simulate attacks (DDoS, Self-harm, PII) for testing defenses.
+
+![Anomaly Detection Flow](docs/anamoly_detection.png)
+
+---
+
+## 📚 Documentation Index
+
+We maintain modular documentation to help you get started quickly.
+
+| Guide | Audience | Description |
+| :--- | :--- | :--- |
+| **[🏛️ System Architecture](docs/ARCHITECTURE.md)** | Architects | Deep dive into the Dual-Layer Pipeline and Tech Stack. |
+| **[📖 User Guide](docs/USER_GUIDE.md)** | End Users | How to use the Chat Interface and Simulation Toolbar. |
+| **[👮 Admin Guide](docs/ADMIN_GUIDE.md)** | Admins | Triage dashboard workflows and HITL best practices. |
+
+> **Live Docs:** You can also view the documentation securely within the app at [`/docs`](http://localhost:3000/docs).
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+*   Node.js 18+
+*   PostgreSQL
+*   API Keys for Google Gemini & Groq
+
+### Installation
+
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/Kaleemullah-Younas/CHAPAL.git
+    cd chapal
+    ```
+
+2.  **Install dependencies**
     ```bash
     npm install
     ```
 
-2.  **Environment Setup**
-    Refer to `src/app/api/chat/route.ts` for required keys (Gemini, Groq, Database).
+3.  **Set up environment variables**
+    Create a `.env` file based on `.env.example` and add your database and API keys.
 
-3.  **Run Development Server**
+4.  **Initialize Database**
+    ```bash
+    npx prisma generate
+    npx prisma db push
+    ```
+
+5.  **Run the development server**
     ```bash
     npm run dev
     ```
-    Visit [http://localhost:3000](http://localhost:3000).
-
-4.  **View Examples**
-    The app includes a live [Docs](/src/app/docs) route at `http://localhost:3000/docs`.
 
 ---
 
-## Key Features
+## 📄 License
 
-*   **Real-time Anomaly Detection**: Blocks PII, Medical Advice, and Prompt Injection.
-*   **Simulation Toolbar**: Test defenses with one-click attacks.
-*   **Transparency Panel**: View live safety scores and emotion analysis.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
