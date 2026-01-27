@@ -79,17 +79,43 @@ export default function SignUpPage() {
   const passwordStrength = getPasswordStrength(password);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center auth-texture px-4 py-12 relative overflow-hidden">
+      {/* Animated background blobs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-accent/20 to-primary/10 rounded-full blur-3xl animate-pulse" />
+        <div
+          className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-tr from-primary/10 to-accent/20 rounded-full blur-3xl animate-pulse"
+          style={{ animationDelay: '1s' }}
+        />
+      </div>
+
       <div className="relative z-10 w-full max-w-md">
         {/* Card */}
-        <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
+        <div className="rounded-3xl border border-accent/20 bg-white/90 backdrop-blur-xl p-8 shadow-xl shadow-accent/10">
           {/* Header */}
           <div className="mb-8 text-center">
             <Link
               href="/"
-              className="inline-block text-2xl font-bold text-foreground cursor-pointer"
+              className="inline-flex items-center gap-2 text-2xl font-bold cursor-pointer"
             >
-              CHAPAL
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-primary"
+              >
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+                <path d="m9 12 2 2 4-4" />
+              </svg>
+              <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                CHAPAL
+              </span>
             </Link>
             <h1 className="mt-4 text-2xl font-semibold text-foreground">
               Create your account
@@ -104,7 +130,7 @@ export default function SignUpPage() {
             <button
               onClick={() => handleOAuthSignIn('google')}
               disabled={isGoogleLoading || isGithubLoading || isLoading}
-              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-input bg-background text-foreground transition-all duration-300 hover:bg-muted cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-accent/30 bg-white/80 text-foreground transition-all duration-300 hover:bg-accent/10 hover:border-accent/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isGoogleLoading ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -134,7 +160,7 @@ export default function SignUpPage() {
             <button
               onClick={() => handleOAuthSignIn('github')}
               disabled={isGoogleLoading || isGithubLoading || isLoading}
-              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-input bg-background text-foreground transition-all duration-300 hover:bg-muted cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-accent/30 bg-white/80 text-foreground transition-all duration-300 hover:bg-accent/10 hover:border-accent/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isGithubLoading ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -153,15 +179,15 @@ export default function SignUpPage() {
 
           {/* Divider */}
           <div className="my-6 flex items-center gap-4">
-            <div className="h-px flex-1 bg-border" />
+            <div className="h-px flex-1 bg-accent/30" />
             <span className="text-sm text-muted-foreground">or</span>
-            <div className="h-px flex-1 bg-border" />
+            <div className="h-px flex-1 bg-accent/30" />
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-600 dark:text-red-400">
+              <div className="rounded-2xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-600 dark:text-red-400">
                 {error}
               </div>
             )}
@@ -180,7 +206,7 @@ export default function SignUpPage() {
                 onChange={e => setName(e.target.value)}
                 required
                 disabled={isLoading || isGoogleLoading || isGithubLoading}
-                className="h-12 w-full rounded-xl border border-input bg-background px-4 text-foreground placeholder-muted-foreground outline-none transition-all duration-300 focus:border-foreground focus:ring-1 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-12 w-full rounded-2xl border border-accent/30 bg-white/80 px-4 text-foreground placeholder-muted-foreground outline-none transition-all duration-300 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="John Doe"
               />
             </div>
@@ -199,7 +225,7 @@ export default function SignUpPage() {
                 onChange={e => setEmail(e.target.value)}
                 required
                 disabled={isLoading || isGoogleLoading || isGithubLoading}
-                className="h-12 w-full rounded-xl border border-input bg-background px-4 text-foreground placeholder-muted-foreground outline-none transition-all duration-300 focus:border-foreground focus:ring-1 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-12 w-full rounded-2xl border border-accent/30 bg-white/80 px-4 text-foreground placeholder-muted-foreground outline-none transition-all duration-300 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="you@example.com"
               />
             </div>
@@ -219,7 +245,7 @@ export default function SignUpPage() {
                 required
                 minLength={8}
                 disabled={isLoading || isGoogleLoading || isGithubLoading}
-                className="h-12 w-full rounded-xl border border-input bg-background px-4 text-foreground placeholder-muted-foreground outline-none transition-all duration-300 focus:border-foreground focus:ring-1 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-12 w-full rounded-2xl border border-accent/30 bg-white/80 px-4 text-foreground placeholder-muted-foreground outline-none transition-all duration-300 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="••••••••"
               />
               {password && (
@@ -257,7 +283,7 @@ export default function SignUpPage() {
             <button
               type="submit"
               disabled={isLoading || isGoogleLoading || isGithubLoading}
-              className="flex items-center justify-center gap-2 h-12 w-full rounded-xl bg-primary font-medium text-primary-foreground transition-all duration-300 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="flex items-center justify-center gap-2 h-12 w-full rounded-2xl bg-gradient-to-r from-primary to-accent font-medium text-white transition-all duration-300 hover:shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isLoading && (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
