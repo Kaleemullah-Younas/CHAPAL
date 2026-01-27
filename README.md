@@ -63,7 +63,7 @@ We maintain modular documentation to help you get started quickly.
 | **[📖 User Guide](docs/USER_GUIDE.md)**            | End Users  | How to use the Chat Interface and Simulation Toolbar.  |
 | **[👮 Admin Guide](docs/ADMIN_GUIDE.md)**          | Admins     | Triage dashboard workflows and HITL best practices.    |
 
-> **Live Docs:** You can also view the documentation securely within the app at [`/docs`](http://localhost:3000/docs).
+> **Live Docs:** You can also view the documentation securely within the app at [`/docs`](https://chapal.strangers.systems/docs).
 
 ---
 
