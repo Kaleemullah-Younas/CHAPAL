@@ -34,18 +34,18 @@ Our **Dual-Layer Detection System** ensures robust protection without compromisi
 
 ## 🌟 Key Features
 
-*   **⚡ Real-Time Anomaly Detection**:
-    *   **Prompt Injection**: Detects attempts to jailbreak the model (e.g., "Ignore previous instructions").
-    *   **Hallucination Check**: Cross-references AI responses for factual consistency.
-    *   **Policy Enforcement**: Blocks Medical/Legal advice and Toxic content.
-*   **👩‍💻 Human-in-the-Loop Intervention**:
-    *   Admins can **Approve**, **Block**, or **Rewrite** flagged responses.
-    *   " Rewrite" actions create a feedback loop, improving the model over time.
-*   **📊 Transparent Analytics**:
-    *   **Safety Score**: Live 0-100 metric for every session.
-    *   **Emotion Recognition**: Tracks user sentiment intensity.
-*   **🔧 Developer Simulation Tools**:
-    *   Built-in toolbar to simulate attacks (DDoS, Self-harm, PII) for testing defenses.
+- **⚡ Real-Time Anomaly Detection**:
+  - **Prompt Injection**: Detects attempts to jailbreak the model (e.g., "Ignore previous instructions").
+  - **Hallucination Check**: Cross-references AI responses for factual consistency.
+  - **Policy Enforcement**: Blocks Medical/Legal advice and Toxic content.
+- **👩‍💻 Human-in-the-Loop Intervention**:
+  - Admins can **Approve**, **Block**, or **Rewrite** flagged responses.
+  - " Rewrite" actions create a feedback loop, improving the model over time.
+- **📊 Transparent Analytics**:
+  - **Safety Score**: Live 0-100 metric for every session.
+  - **Emotion Recognition**: Tracks user sentiment intensity.
+- **🔧 Developer Simulation Tools**:
+  - Built-in toolbar to simulate attacks (DDoS, Self-harm, PII) for testing defenses.
 
 ![Anomaly Detection Flow](docs/anamoly_detection.png)
 
@@ -55,11 +55,11 @@ Our **Dual-Layer Detection System** ensures robust protection without compromisi
 
 We maintain modular documentation to help you get started quickly.
 
-| Guide | Audience | Description |
-| :--- | :--- | :--- |
+| Guide                                              | Audience   | Description                                            |
+| :------------------------------------------------- | :--------- | :----------------------------------------------------- |
 | **[🏛️ System Architecture](docs/ARCHITECTURE.md)** | Architects | Deep dive into the Dual-Layer Pipeline and Tech Stack. |
-| **[📖 User Guide](docs/USER_GUIDE.md)** | End Users | How to use the Chat Interface and Simulation Toolbar. |
-| **[👮 Admin Guide](docs/ADMIN_GUIDE.md)** | Admins | Triage dashboard workflows and HITL best practices. |
+| **[📖 User Guide](docs/USER_GUIDE.md)**            | End Users  | How to use the Chat Interface and Simulation Toolbar.  |
+| **[👮 Admin Guide](docs/ADMIN_GUIDE.md)**          | Admins     | Triage dashboard workflows and HITL best practices.    |
 
 > **Live Docs:** You can also view the documentation securely within the app at [`/docs`](http://localhost:3000/docs).
 
@@ -68,19 +68,22 @@ We maintain modular documentation to help you get started quickly.
 ## 🚀 Getting Started
 
 ### Prerequisites
-*   Node.js 18+
-*   PostgreSQL
-*   API Keys for Google Gemini & Groq
+
+- Node.js 18+
+- PostgreSQL
+- API Keys for Google Gemini & Groq
 
 ### Installation
 
 1.  **Clone the repository**
+
     ```bash
     git clone https://github.com/Kaleemullah-Younas/CHAPAL.git
     cd chapal
     ```
 
 2.  **Install dependencies**
+
     ```bash
     npm install
     ```
@@ -89,6 +92,7 @@ We maintain modular documentation to help you get started quickly.
     Create a `.env` file based on `.env.example` and add your database and API keys.
 
 4.  **Initialize Database**
+
     ```bash
     npx prisma generate
     npx prisma db push
@@ -98,9 +102,3 @@ We maintain modular documentation to help you get started quickly.
     ```bash
     npm run dev
     ```
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
