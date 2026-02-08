@@ -1,10 +1,28 @@
+/**
+ * CHAPAL — Google Gemini 3 Integration (Primary AI Engine)
+ *
+ * This module is the core AI layer of CHAPAL. It uses the official Google
+ * Generative AI SDK (@google/generative-ai) to interact with the
+ * Gemini 3 model (gemini-3-flash-preview).
+ *
+ * Key exports:
+ *   - streamGeminiResponse()  → Streams chat responses from Gemini 3
+ *   - generateChatTitle()     → Auto-generates chat titles using Gemini 3
+ *   - createImagePart()       → Builds image parts for multimodal Gemini input
+ *   - createTextPart()        → Builds text parts for Gemini input
+ *
+ * Environment variable required:
+ *   GEMINI_API_KEY — Google Gemini API key (supports comma-separated keys for rotation)
+ *   Get your key at: https://aistudio.google.com/apikey
+ */
 import {
   GoogleGenerativeAI,
   Part,
   GenerativeModel,
 } from '@google/generative-ai';
 
-// Parse comma-separated API keys from environment variable
+// Parse comma-separated Gemini API keys from environment variable
+// Supports multiple keys for automatic rate-limit rotation
 const API_KEYS = (process.env.GEMINI_API_KEY || '')
   .split(',')
   .map(key => key.trim())
@@ -33,9 +51,11 @@ class GeminiKeyManager {
     return this.clients.get(key)!;
   }
 
+  // Returns the Gemini 3 model instance (gemini-3-flash-preview)
+  // This is the primary AI model used for all chat generation in CHAPAL
   getModel(): GenerativeModel {
     return this.getClient().getGenerativeModel({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-flash-preview', // Google Gemini 3 — core generation model
     });
   }
 
@@ -100,6 +120,11 @@ export interface ChatMessage {
   parts: Part[];
 }
 
+/**
+ * Stream a chat response from Google Gemini 3 (gemini-3-flash-preview).
+ * This is the primary AI generation function used by the chat API route.
+ * Supports multi-turn conversations with system prompts and multimodal input.
+ */
 export async function* streamGeminiResponse(
   messages: ChatMessage[],
   systemPrompt?: string,
@@ -157,6 +182,10 @@ export async function* streamGeminiResponse(
   }
 }
 
+/**
+ * Generate a short chat title using Google Gemini 3 (gemini-3-flash-preview).
+ * Called automatically when a new chat conversation is started.
+ */
 export async function generateChatTitle(firstMessage: string): Promise<string> {
   // Reset to first key at the start of a new request
   keyManager.resetKeyIndex();

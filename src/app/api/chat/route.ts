@@ -1,10 +1,27 @@
+/**
+ * CHAPAL — Main Chat API Route
+ *
+ * This is the core API endpoint that orchestrates the full Dual-Layer
+ * AI safety pipeline. Google Gemini 3 (gemini-3-flash-preview) is used
+ * as the primary AI generation engine:
+ *
+ *   - streamGeminiResponse() → Generates AI chat responses via Gemini 3
+ *   - generateChatTitle()    → Auto-generates chat titles via Gemini 3
+ *
+ * The pipeline flow:
+ *   1. Layer 1: Deterministic safety checks (regex, patterns, spike detection)
+ *   2. Gemini 3: AI response generation via @google/generative-ai SDK
+ *   3. Layer 2: Semantic analysis via Groq/Llama 3.1 (hallucination, tone, safety)
+ *   4. Decision gate: deliver, block, or route to admin for review
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
+// Google Gemini 3 SDK — primary AI generation engine
 import {
-  streamGeminiResponse,
-  generateChatTitle,
+  streamGeminiResponse, // Streams chat responses from Gemini 3 (gemini-3-flash-preview)
+  generateChatTitle, // Generates chat titles using Gemini 3
   createTextPart,
   createImagePart,
   ChatMessage,

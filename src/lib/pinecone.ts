@@ -1,11 +1,19 @@
 /**
- * CHAPAL - Pinecone Integration for Semantic Feedback Learning
+ * CHAPAL — Pinecone Integration for Semantic Feedback Learning
  *
- * This module handles:
- * - Vector embeddings generation using Gemini
- * - Storing feedback data in Pinecone for learning
- * - Similarity search to retrieve relevant context
- * - Building AI context from historical admin corrections
+ * This module uses Google Gemini's embedding model (gemini-embedding-001)
+ * to generate vector embeddings, which are stored in Pinecone for semantic
+ * similarity search and continuous learning from admin feedback.
+ *
+ * Gemini usage in this file:
+ *   - generateEmbedding() → Calls Gemini Embedding API (gemini-embedding-001)
+ *     via REST at https://generativelanguage.googleapis.com/v1beta/
+ *   - Uses GEMINI_API_KEY environment variable for authentication
+ *
+ * Other functionality:
+ *   - Storing feedback data in Pinecone for learning
+ *   - Similarity search to retrieve relevant context
+ *   - Building AI context from historical admin corrections
  */
 
 import { Pinecone, type RecordMetadata } from '@pinecone-database/pinecone';
@@ -26,7 +34,8 @@ const INDEX_NAME = 'chapal-feedback';
 let indexVerified = false;
 let indexCreationInProgress = false;
 
-// Gemini API key for embeddings
+// Gemini API key for embeddings — uses the same GEMINI_API_KEY env var
+// that powers the main Gemini 3 chat generation (first key from rotation pool)
 const geminiApiKey = (process.env.GEMINI_API_KEY || '').split(',')[0]?.trim();
 
 // Metadata structure for stored vectors
